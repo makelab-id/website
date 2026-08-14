@@ -12,14 +12,24 @@ let app: import("express").Express;
 let dbFile: string;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let request: any;
+// An authenticated agent — mutating routes now require an admin session.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let agent: any;
+
+const ADMIN_PASSWORD = "test-admin-password";
 
 beforeAll(async () => {
   dbFile = path.join(os.tmpdir(), `makelab-test-crud-${Date.now()}-${Math.random().toString(36).slice(2)}.sqlite`);
   process.env.DATABASE_URL = dbFile;
+  process.env.ADMIN_PASSWORD = ADMIN_PASSWORD;
+  process.env.ADMIN_SESSION_SECRET = "test-session-secret";
   await import("../../db/client.js"); // applies migrations against the temp file on import
   ({ default: request } = await import("supertest"));
   const { createApiApp } = await import("../../server/app.js");
   app = createApiApp();
+  agent = request.agent(app);
+  const login = await agent.post("/api/admin/login").send({ password: ADMIN_PASSWORD });
+  if (login.status !== 200) throw new Error("test setup: admin login failed");
 });
 
 afterAll(() => {
@@ -79,13 +89,18 @@ describe.each(RESOURCES)("CRUD contract for $path", ({ path: resourcePath, valid
     expect(Array.isArray(res.body)).toBe(true);
   });
 
+  it("rejects a mutation with no admin session", async () => {
+    const res = await request(app).post(resourcePath).send(valid);
+    expect(res.status).toBe(401);
+  });
+
   it("rejects an invalid payload with 400", async () => {
-    const res = await request(app).post(resourcePath).send(invalid);
+    const res = await agent.post(resourcePath).send(invalid);
     expect(res.status).toBe(400);
   });
 
   it("creates a row from a valid payload", async () => {
-    const res = await request(app).post(resourcePath).send(valid);
+    const res = await agent.post(resourcePath).send(valid);
     expect(res.status).toBe(201);
     expect(typeof res.body.id).toBe("number");
     createdId = res.body.id;
@@ -108,7 +123,7 @@ describe.each(RESOURCES)("CRUD contract for $path", ({ path: resourcePath, valid
   });
 
   it("applies a partial patch on PUT", async () => {
-    const res = await request(app).put(`${resourcePath}/${createdId}`).send(patch);
+    const res = await agent.put(`${resourcePath}/${createdId}`).send(patch);
     expect(res.status).toBe(200);
     for (const [key, value] of Object.entries(patch)) {
       expect(res.body[key]).toBe(value);
@@ -116,12 +131,17 @@ describe.each(RESOURCES)("CRUD contract for $path", ({ path: resourcePath, valid
   });
 
   it("rejects an empty patch body", async () => {
-    const res = await request(app).put(`${resourcePath}/${createdId}`).send({});
+    const res = await agent.put(`${resourcePath}/${createdId}`).send({});
     expect(res.status).toBe(400);
   });
 
-  it("deletes the row", async () => {
+  it("rejects a delete with no admin session", async () => {
     const res = await request(app).delete(`${resourcePath}/${createdId}`);
+    expect(res.status).toBe(401);
+  });
+
+  it("deletes the row", async () => {
+    const res = await agent.delete(`${resourcePath}/${createdId}`);
     expect(res.status).toBe(204);
   });
 

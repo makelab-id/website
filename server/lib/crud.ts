@@ -3,6 +3,7 @@ import type { z } from "zod";
 import { eq, type SQL } from "drizzle-orm";
 import { db } from "../../db/client.js";
 import { asyncHandler } from "./asyncHandler.js";
+import { requireAdmin } from "./adminAuth.js";
 
 /**
  * Generic REST CRUD router for a single Drizzle table. Used for the five
@@ -42,6 +43,7 @@ export function crudRouter(opts: {
 
   router.post(
     "/",
+    requireAdmin,
     asyncHandler(async (req, res) => {
       const parsed = insertSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -54,6 +56,7 @@ export function crudRouter(opts: {
 
   router.put(
     "/:id",
+    requireAdmin,
     asyncHandler(async (req, res) => {
       const id = Number(req.params.id);
       if (!Number.isInteger(id)) {
@@ -74,6 +77,7 @@ export function crudRouter(opts: {
 
   router.delete(
     "/:id",
+    requireAdmin,
     asyncHandler(async (req, res) => {
       const id = Number(req.params.id);
       if (!Number.isInteger(id)) {

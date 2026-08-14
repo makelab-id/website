@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../../db/client.js";
 import { settings, settingsUpdateSchema } from "../../db/schema.js";
 import { asyncHandler } from "../lib/asyncHandler.js";
+import { requireAdmin } from "../lib/adminAuth.js";
 
 // Settings is a singleton row (seeded once by db/seed.ts) — GET/PUT only,
 // no create/delete/list. PUT accepts a partial patch once the row exists,
@@ -25,6 +26,7 @@ settingsRouter.get(
 
 settingsRouter.put(
   "/",
+  requireAdmin,
   asyncHandler(async (req, res) => {
     const existing = await getRow();
 

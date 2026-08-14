@@ -19,8 +19,13 @@ Single Node "monolith" process — one server, one port, in both dev and prod:
   material/color/quality/infill options, the printable-parts catalog, and
   site-wide settings (WhatsApp number, machine rate, fees, discounts) all
   live here instead of hardcoded arrays.
-- **API**: full CRUD REST endpoints for every catalog resource, even though
-  there's no admin UI yet (`Admin.dc.html` is out of scope) — see below.
+- **API**: full CRUD REST endpoints for every catalog resource. GETs are
+  public (the storefront reads them); POST/PUT/DELETE require an admin
+  session (see Admin panel below).
+- **Admin panel** (`/admin`): a real port of the design's `Admin.dc.html` —
+  password login, then "Opsi Kalkulator" (materials/quality/infill/colors/
+  settings) and "Katalog Model" (the printable-parts catalog), editing the
+  same data the storefront reads.
 
 ```
 db/        Drizzle schema, migrations, seed script, DB client
@@ -33,10 +38,16 @@ tests/     Vitest: pricing unit tests, API integration tests, component tests
 
 ```bash
 npm install
-cp .env.example .env        # PORT and DATABASE_URL — defaults are fine locally
+cp .env.example .env        # set ADMIN_PASSWORD and ADMIN_SESSION_SECRET; PORT/DATABASE_URL defaults are fine locally
 npm run db:migrate
 npm run db:seed             # populates materials/colors/quality/infill/models/settings
 ```
+
+`ADMIN_PASSWORD` is the password for `/admin`. `ADMIN_SESSION_SECRET` signs the
+admin session cookie — generate a real one with `openssl rand -hex 32`. The
+storefront works fine without either set, but `/admin` won't: login 500s
+without `ADMIN_PASSWORD` configured, and without `ADMIN_SESSION_SECRET` any
+session-signing attempt throws.
 
 ## Running
 
@@ -59,17 +70,36 @@ Builds the client, server, and seed script, then serves the site at
 `http://localhost:4000`. The SQLite file lives in a named volume
 (`makelab-data`), so data survives container restarts; migrations run
 automatically on boot and seeding is idempotent, so it's safe to run on
-every start.
+every start. `docker-compose.yml` loads `ADMIN_PASSWORD`/`ADMIN_SESSION_SECRET`
+from your local `.env` (`env_file:`) — make sure it exists and isn't left at
+the dev placeholder values before exposing this beyond your own machine.
 
 ## Testing
 
 ```bash
-npm test                    # pricing calculator unit tests, API CRUD/validation
+npm test                    # pricing calculator unit tests, API CRUD/validation/auth
                              # tests (temp SQLite files, never the dev DB), and
                              # component tests (routes, Quote interaction, Katalog
-                             # filtering, Nav active state)
+                             # filtering, Nav active state, admin login)
 npm run typecheck           # tsc --noEmit across client, server, and db
 ```
+
+## Admin panel
+
+`/admin` — password login (`ADMIN_PASSWORD`), then:
+
+- **Opsi Kalkulator** (`/admin`) — materials, quality/infill options, filament
+  colors, and the flat cost settings (machine rate, setup fee, express
+  markup, finish costs, bulk discount) that back the Quote screen's
+  calculator.
+- **Katalog Model** (`/admin/katalog`) — the printable-parts catalog: active
+  toggle, name/category/size/material/price/description, add/remove.
+
+Edits commit on blur (or immediately for checkboxes/radios/add/remove) and
+take effect on the public site right away — there's no separate publish
+step. The session is a signed HTTP-only cookie (`ADMIN_SESSION_SECRET`), not
+a database-backed login system — fine for a single shared admin password,
+not meant for multiple accounts.
 
 ## API
 
@@ -80,11 +110,15 @@ GET/POST      /api/quality-options  GET/PUT/DELETE /api/quality-options/:id
 GET/POST      /api/infill-options   GET/PUT/DELETE /api/infill-options/:id
 GET/POST      /api/models           GET/PUT/DELETE /api/models/:id
 GET/PUT       /api/settings                          (singleton row, no create/delete)
+
+POST          /api/admin/login                       ({ password }) -> sets session cookie
+POST          /api/admin/logout
+GET           /api/admin/session                     -> { loggedIn }
 ```
 
-The frontend only reads from these (no admin UI ships in this repo), but the
-schema and routes are already CRUD-complete so a future admin page can be
-added without any backend rework.
+GETs on the catalog resources are public (the storefront reads them without
+auth). POST/PUT/DELETE on all of them, and PUT on `/api/settings`, require a
+valid admin session — see `server/lib/adminAuth.ts`.
 
 ## Swapping in real photos
 

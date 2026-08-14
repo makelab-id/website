@@ -1,10 +1,12 @@
 import express, { type NextFunction, type Request, type Response } from "express";
+import cookieParser from "cookie-parser";
 import { materialsRouter } from "./routes/materials.js";
 import { colorsRouter } from "./routes/colors.js";
 import { qualityOptionsRouter } from "./routes/qualityOptions.js";
 import { infillOptionsRouter } from "./routes/infillOptions.js";
 import { modelsRouter } from "./routes/models.js";
 import { settingsRouter } from "./routes/settings.js";
+import { adminAuthRouter } from "./routes/adminAuth.js";
 
 /**
  * The API-only Express app, with no static file serving or Vite wiring.
@@ -14,7 +16,9 @@ import { settingsRouter } from "./routes/settings.js";
 export function createApiApp() {
   const app = express();
   app.use(express.json());
+  app.use(cookieParser());
 
+  app.use("/api/admin", adminAuthRouter);
   app.use("/api/materials", materialsRouter);
   app.use("/api/colors", colorsRouter);
   app.use("/api/quality-options", qualityOptionsRouter);

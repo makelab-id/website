@@ -12,14 +12,23 @@ let app: import("express").Express;
 let dbFile: string;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let request: any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let agent: any;
+
+const ADMIN_PASSWORD = "test-admin-password";
 
 beforeAll(async () => {
   dbFile = path.join(os.tmpdir(), `makelab-test-settings-${Date.now()}-${Math.random().toString(36).slice(2)}.sqlite`);
   process.env.DATABASE_URL = dbFile;
+  process.env.ADMIN_PASSWORD = ADMIN_PASSWORD;
+  process.env.ADMIN_SESSION_SECRET = "test-session-secret";
   await import("../../db/client.js");
   ({ default: request } = await import("supertest"));
   const { createApiApp } = await import("../../server/app.js");
   app = createApiApp();
+  agent = request.agent(app);
+  const login = await agent.post("/api/admin/login").send({ password: ADMIN_PASSWORD });
+  if (login.status !== 200) throw new Error("test setup: admin login failed");
 });
 
 afterAll(() => {
@@ -48,13 +57,18 @@ describe("GET /api/settings before seeding", () => {
 });
 
 describe("PUT /api/settings", () => {
+  it("rejects a mutation with no admin session", async () => {
+    const res = await request(app).put("/api/settings").send(FULL_SETTINGS);
+    expect(res.status).toBe(401);
+  });
+
   it("rejects a partial payload when the row doesn't exist yet", async () => {
-    const res = await request(app).put("/api/settings").send({ setupFee: 12000 });
+    const res = await agent.put("/api/settings").send({ setupFee: 12000 });
     expect(res.status).toBe(400);
   });
 
   it("bootstraps the row from a complete payload", async () => {
-    const res = await request(app).put("/api/settings").send(FULL_SETTINGS);
+    const res = await agent.put("/api/settings").send(FULL_SETTINGS);
     expect(res.status).toBe(201);
     expect(res.body).toMatchObject(FULL_SETTINGS);
   });
@@ -66,7 +80,7 @@ describe("PUT /api/settings", () => {
   });
 
   it("applies a partial patch once the row exists", async () => {
-    const res = await request(app).put("/api/settings").send({ setupFee: 12000 });
+    const res = await agent.put("/api/settings").send({ setupFee: 12000 });
     expect(res.status).toBe(200);
     expect(res.body.setupFee).toBe(12000);
     // Untouched fields survive the patch.
@@ -74,12 +88,12 @@ describe("PUT /api/settings", () => {
   });
 
   it("rejects an empty patch body", async () => {
-    const res = await request(app).put("/api/settings").send({});
+    const res = await agent.put("/api/settings").send({});
     expect(res.status).toBe(400);
   });
 
   it("rejects an invalid field value", async () => {
-    const res = await request(app).put("/api/settings").send({ bulkDiscountPct: 1.5 });
+    const res = await agent.put("/api/settings").send({ bulkDiscountPct: 1.5 });
     expect(res.status).toBe(400);
   });
 });
