@@ -1,0 +1,16 @@
+services:
+  app:
+    build: .
+    ports:
+      - "4000:4000"
+    env_file:
+      - .env
+    environment:
+      PORT: 4000
+      DATABASE_URL: /app/data/makelab.sqlite
+    volumes:
+      - makelab-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  makelab-data:
