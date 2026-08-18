@@ -1,112 +1,123 @@
 import { Link } from "react-router-dom";
-import { useMaterials, useSettings } from "../lib/api";
+import { useFinishOptions, useMaterials, useSettings } from "../lib/api";
 import { rupiah } from "../lib/pricing";
-
-const EXAMPLES = [
-  {
-    kicker: "PLA · 0,20 mm · infill 25%",
-    title: "Gantungan kunci 4 cm",
-    body: "±8 gram, cetak 35 menit.",
-    price: "Rp 25.000 – Rp 32.000",
-  },
-  {
-    kicker: "PLA · 0,20 mm · infill 25%",
-    title: "Part chassis Tamiya",
-    body: "±18 gram, cetak 1 jam 20 menit.",
-    price: "Rp 48.000 – Rp 60.000",
-  },
-  {
-    kicker: "PETG · 0,20 mm · infill 50%",
-    title: "Mount aksesori airsoft",
-    body: "±34 gram, cetak 2 jam 30 menit.",
-    price: "Rp 105.000 – Rp 132.000",
-  },
-  {
-    kicker: "Resin 8K · figur mini",
-    title: "Figur 6 cm + finishing",
-    body: "±22 gram resin, sudah termasuk amplas halus.",
-    price: "Rp 135.000 – Rp 165.000",
-  },
-];
 
 export function Harga() {
   const { data: materials } = useMaterials();
+  const { data: finishOptions } = useFinishOptions();
   const { data: settings } = useSettings();
 
   return (
-    <main style={{ maxWidth: 1180, margin: "0 auto", padding: "44px 24px 0" }}>
+    <main className="mk-page" style={{ maxWidth: 1180, margin: "0 auto", padding: "44px 24px 0" }}>
       <h6 style={{ color: "var(--color-accent)", marginBottom: 6 }}>Pricing</h6>
-      <h1 style={{ fontSize: 44, margin: "0 0 10px" }}>Cara kami menghitung harga</h1>
+      <h1 style={{ fontSize: "clamp(30px, 6vw, 44px)", margin: "0 0 10px" }}>Cara kami menghitung harga</h1>
       <p style={{ maxWidth: "62ch", color: "var(--color-neutral-700)", fontSize: 15 }}>
-        Harga cetak = material yang terpakai + waktu mesin + finishing + biaya setup. Tidak ada biaya tersembunyi;
-        kalau estimasi website berbeda jauh dari hitungan asli, kami kabari sebelum mulai.
+        Tidak ada biaya tersembunyi. Kalau estimasi website berbeda jauh dari hitungan asli, kami kabari sebelum
+        mulai.
       </p>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 36, marginTop: 34, alignItems: "start" }}>
-        <div>
-          <h2 style={{ fontSize: 26, marginBottom: 14 }}>Tarif dasar</h2>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Komponen</th>
-                <th>Tarif</th>
-              </tr>
-            </thead>
-            <tbody>
-              {materials?.filter((m) => !m.comingSoon).map((m) => (
-                <tr key={m.id}>
-                  <td>{m.name}</td>
-                  <td>{rupiah(m.ratePerGram)} / gram</td>
-                </tr>
-              ))}
-              {settings && (
-                <>
-                  <tr>
-                    <td>Waktu mesin</td>
-                    <td>{rupiah(settings.machineRatePerHour)} / jam</td>
-                  </tr>
-                  <tr>
-                    <td>Setup &amp; QC</td>
-                    <td>{rupiah(settings.setupFee)} / order</td>
-                  </tr>
-                  <tr>
-                    <td>Amplas halus</td>
-                    <td>{rupiah(settings.finishCostSand)} / pcs</td>
-                  </tr>
-                  <tr>
-                    <td>Amplas + cat</td>
-                    <td>{rupiah(settings.finishCostPaint)} / pcs</td>
-                  </tr>
-                  <tr>
-                    <td>Express 24 jam</td>
-                    <td>+{Math.round(settings.expressMarkupPct * 100)}%</td>
-                  </tr>
-                  <tr>
-                    <td>Order {settings.bulkQtyThreshold} pcs ke atas</td>
-                    <td>−{Math.round(settings.bulkDiscountPct * 100)}%</td>
-                  </tr>
-                </>
-              )}
-            </tbody>
-          </table>
-          <p style={{ fontSize: 13, color: "var(--color-neutral-600)", marginTop: 14 }}>
-            Layer 0,12 mm menambah waktu mesin sekitar 60%; 0,28 mm memotongnya sekitar 25%. Infill mengubah berat
-            material.
-          </p>
+      <div
+        style={{
+          marginTop: 28,
+          background: "var(--color-accent-2-100)",
+          borderRadius: "calc(var(--radius-lg) * 1.15)",
+          padding: "28px 32px",
+        }}
+      >
+        <h6 style={{ color: "var(--color-accent-2-800)", marginBottom: 14 }}>Rumus harga</h6>
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "10px 10px" }}>
+          <span
+            style={{
+              fontFamily: "var(--font-heading)",
+              fontSize: "clamp(18px, 2.8vw, 24px)",
+              color: "var(--color-accent-2-900)",
+            }}
+          >
+            Harga Cetak
+          </span>
+          <span style={{ fontFamily: "var(--font-heading)", fontSize: "clamp(18px, 2.8vw, 24px)", color: "var(--color-accent-2-700)" }}>
+            =
+          </span>
+          <span className="tag tag-accent-2" style={{ fontSize: 17 }}>Biaya setup</span>
+          <span style={{ fontSize: 17, color: "var(--color-accent-2-700)" }}>+</span>
+          <span className="tag tag-accent-2" style={{ fontSize: 17 }}>Biaya material</span>
+          <span style={{ fontSize: 17, color: "var(--color-accent-2-700)" }}>+</span>
+          <span className="tag tag-accent-2" style={{ fontSize: 17 }}>Biaya waktu mesin</span>
+          <span style={{ fontSize: 17, color: "var(--color-accent-2-700)" }}>+</span>
+          <span className="tag tag-accent-2" style={{ fontSize: 17 }}>Biaya finishing</span>
         </div>
-        <div>
-          <h2 style={{ fontSize: 26, marginBottom: 14 }}>Contoh harga nyata</h2>
-          <div style={{ display: "grid", gap: 14 }}>
-            {EXAMPLES.map((ex) => (
-              <div key={ex.title} className="card elev-sm" style={{ gap: 6 }}>
-                <span className="card-kicker">{ex.kicker}</span>
-                <span className="card-title">{ex.title}</span>
-                <p className="card-body">{ex.body}</p>
-                <span style={{ fontFamily: "var(--font-heading)", fontSize: 18 }}>{ex.price}</span>
-              </div>
-            ))}
+      </div>
+
+      <div className="mk-grid mk-stack-900" style={{ gridTemplateColumns: "1.1fr 0.9fr", gap: 28, marginTop: 34, marginBottom: 40, alignItems: "start" }}>
+        <div style={{ background: "var(--color-surface)", borderRadius: "calc(var(--radius-lg) * 1.15)", padding: 32, boxShadow: "var(--shadow-sm)" }}>
+          <h2 style={{ fontSize: 24, marginBottom: 14 }}>Tarif dasar</h2>
+          <div className="table-scroll">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Komponen</th>
+                  <th>Tarif</th>
+                </tr>
+              </thead>
+              <tbody>
+                {materials?.filter((m) => !m.comingSoon).map((m) => (
+                  <tr key={m.id}>
+                    <td>{m.name}</td>
+                    <td>{rupiah(m.ratePerGram)} / gram</td>
+                  </tr>
+                ))}
+                {settings && (
+                  <>
+                    <tr>
+                      <td>Waktu mesin</td>
+                      <td>{rupiah(settings.machineRatePerHour)} / jam</td>
+                    </tr>
+                    <tr>
+                      <td>Setup &amp; QC</td>
+                      <td>{rupiah(settings.setupFee)} / order</td>
+                    </tr>
+                    {finishOptions?.filter((f) => f.price > 0).map((f) => (
+                      <tr key={f.id}>
+                        <td>{f.label}</td>
+                        <td>{rupiah(f.price)} / pcs</td>
+                      </tr>
+                    ))}
+                    <tr>
+                      <td>Express 24 jam</td>
+                      <td>+{Math.round(settings.expressMarkupPct * 100)}%</td>
+                    </tr>
+                    <tr>
+                      <td>Order {settings.bulkQtyThreshold} pcs ke atas</td>
+                      <td>−{Math.round(settings.bulkDiscountPct * 100)}%</td>
+                    </tr>
+                  </>
+                )}
+              </tbody>
+            </table>
           </div>
-          <Link to="/quote" className="btn btn-primary" style={{ padding: "13px 24px", marginTop: 20, display: "inline-flex" }}>
+        </div>
+
+        <div
+          style={{
+            background: "var(--color-accent)",
+            color: "var(--color-bg)",
+            borderRadius: "calc(var(--radius-lg) * 1.15)",
+            padding: 32,
+            display: "flex",
+            flexDirection: "column",
+            gap: 14,
+          }}
+        >
+          <h3 style={{ fontSize: 20, margin: 0, color: "var(--color-bg)" }}>Mau tahu harga part kamu?</h3>
+          <p style={{ margin: 0, fontSize: 14, opacity: 0.9 }}>
+            Upload file .stl dan lihat estimasinya langsung di layar, dihitung dari rumus yang sama persis dengan di
+            atas.
+          </p>
+          <Link
+            to="/quote"
+            className="btn"
+            style={{ background: "var(--color-bg)", color: "var(--color-text)", padding: "13px 24px", alignSelf: "flex-start" }}
+          >
             Hitung file kamu sendiri
           </Link>
         </div>

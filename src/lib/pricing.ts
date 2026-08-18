@@ -2,26 +2,42 @@
 // hoursText/wa/fileFrom) — the instant price estimator. Parameterized by
 // the DB rows fetched via lib/api.ts instead of the original's hardcoded
 // DEFAULT_* arrays, but the arithmetic is unchanged.
-import type { Color, InfillOption, Material, PrintModel, QualityOption, Settings } from "./types";
+import type { Color, FinishOption, InfillOption, Material, PrintModel, QualityOption, Settings } from "./types";
 
-export type Finish = "none" | "sand" | "paint";
 export type Delivery = "reguler" | "express";
 
 export interface FakeFile {
   name: string;
   kb: number;
-  vol: number; // cm^3, heuristic only
+  vol: number; // cm^3, heuristic only unless parsed from a real .stl
   bbox: [number, number, number]; // mm
+  surfaceAreaMm2: number; // mm^2, heuristic (box) unless parsed from a real .stl
 }
 
-// The site never parses real mesh geometry — it estimates a plausible
-// volume from the uploaded file's byte size, which is enough to give a
-// same-ballpark price before the shop confirms the real one on WhatsApp.
+function estimateBboxMm(volCm3: number): [number, number, number] {
+  const s = Math.cbrt(volCm3) * 10;
+  return [s * 1.6, s * 0.95, s * 0.72];
+}
+
+function boxSurfaceAreaMm2([w, d, h]: [number, number, number]): number {
+  return 2 * (w * d + w * h + d * h);
+}
+
+// The site never parses real mesh geometry for non-.stl uploads — it
+// estimates a plausible volume from the uploaded file's byte size (and a
+// box shape for surface area), which is enough to give a same-ballpark
+// price before the shop confirms the real one on WhatsApp. Real .stl
+// uploads instead get their vol/bbox/surfaceAreaMm2 from src/lib/stl.ts.
 export function fileFrom(name: string, kb: number): FakeFile {
   const vol = Math.max(2.5, Math.min(140, kb / 42));
-  const s = Math.cbrt(vol) * 10;
-  return { name, kb, vol, bbox: [s * 1.6, s * 0.95, s * 0.72] };
+  const bbox = estimateBboxMm(vol);
+  return { name, kb, vol, bbox, surfaceAreaMm2: boxSurfaceAreaMm2(bbox) };
 }
+
+// Used by calc() as the "no file yet" example part, so its surface area
+// needs the same box-shape assumption fileFrom() uses.
+const DEFAULT_PREVIEW_VOL_CM3 = 18;
+const DEFAULT_PREVIEW_SURFACE_AREA_MM2 = boxSurfaceAreaMm2(estimateBboxMm(DEFAULT_PREVIEW_VOL_CM3));
 
 export const SAMPLE_FILE = { name: "bracket_tamiya_v3.stl", kb: 2840 };
 
@@ -52,7 +68,7 @@ export interface CalcInput {
   file: FakeFile | null;
   scale: number; // percent, e.g. 100
   qty: number;
-  finish: Finish;
+  finish: FinishOption;
   delivery: Delivery;
   material: Material;
   quality: QualityOption;
@@ -73,25 +89,34 @@ export interface CalcResult {
   total: number;
 }
 
-const FINISH_COST_FIELD = {
-  none: "finishCostNone",
-  sand: "finishCostSand",
-  paint: "finishCostPaint",
-} as const satisfies Record<Finish, keyof Settings>;
-
 export function calc(input: CalcInput): CalcResult {
   const { file, scale, qty, finish, delivery, material, quality, infill, color, settings } = input;
 
-  // No file yet: fall back to a mid-sized part (~18 cm^3) so the estimate
-  // panel shows a plausible number instead of zero before anything's picked.
-  const vol = (file ? file.vol : 18) * Math.pow(scale / 100, 3);
+  const scaleFactor = scale / 100;
+  // No file yet: fall back to a mid-sized part (~18 cm^3, box-shaped) so the
+  // estimate panel shows a plausible number instead of zero before anything's
+  // picked.
+  const vol = (file ? file.vol : DEFAULT_PREVIEW_VOL_CM3) * Math.pow(scaleFactor, 3);
+  const surfaceAreaMm2 = (file ? file.surfaceAreaMm2 : DEFAULT_PREVIEW_SURFACE_AREA_MM2) * Math.pow(scaleFactor, 2);
   const fill = infill.fillFraction;
-  const grams = vol * fill * material.density;
-  const hours = ((vol * fill) / 5.5) * quality.timeMultiplier;
+
+  // A slicer always prints the outer shell (walls + top/bottom layers)
+  // solid, no matter the infill % — only the interior gets thinned out.
+  // Approximate that shell as a uniform layer of settings.shellThicknessMm
+  // over the mesh's real surface area (thin-shell volume ≈ area × thickness),
+  // capped so it can't exceed the part's own volume on very small/thin parts
+  // (which effectively print fully solid regardless of infill setting).
+  const volMm3 = vol * 1000;
+  const shellVolMm3 = Math.min(surfaceAreaMm2 * settings.shellThicknessMm, volMm3);
+  const interiorVolMm3 = volMm3 - shellVolMm3;
+  const effectiveVol = (shellVolMm3 + interiorVolMm3 * fill) / 1000; // cm^3, solid-equivalent
+
+  const grams = effectiveVol * material.density;
+  const hours = (effectiveVol / 5.5) * quality.timeMultiplier;
 
   const matCostEach = grams * material.ratePerGram;
   const timeCostEach = hours * settings.machineRatePerHour;
-  const finishCost = settings[FINISH_COST_FIELD[finish]] * qty;
+  const finishCost = finish.price * qty;
   const colorCost = (color.extraPrice || 0) * qty;
   const setup = settings.setupFee;
 
@@ -116,12 +141,6 @@ export function priceRange(total: number): { low: number; high: number } {
   return { low: round500(total * 0.9), high: round500(total * 1.12) };
 }
 
-const FINISH_LABEL: Record<Finish, string> = {
-  none: "Apa adanya",
-  sand: "Amplas halus",
-  paint: "Amplas + cat",
-};
-
 export interface QuoteMessageInput {
   file: FakeFile | null;
   materialName: string;
@@ -130,7 +149,7 @@ export interface QuoteMessageInput {
   infillPercent: number;
   scale: number;
   qty: number;
-  finish: Finish;
+  finishLabel: string;
   delivery: Delivery;
   total: number;
 }
@@ -141,7 +160,7 @@ export function buildQuoteMessage(input: QuoteMessageInput): string {
     `Material: ${input.materialName} — ${input.colorName}`,
     `Kualitas: ${input.qualityLabel} | Infill ${input.infillPercent}% | Skala ${input.scale}%`,
     `Jumlah: ${input.qty} pcs`,
-    `Finishing: ${FINISH_LABEL[input.finish]}`,
+    `Finishing: ${input.finishLabel}`,
     `Pengerjaan: ${input.delivery === "express" ? "Express 24 jam" : "Reguler 3–5 hari"}`,
   ].join("\n");
 

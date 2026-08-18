@@ -36,7 +36,7 @@ export function AdminLogin() {
       <form
         onSubmit={onSubmit}
         style={{
-          width: 380,
+          width: "min(380px, 100%)",
           display: "flex",
           flexDirection: "column",
           gap: 16,

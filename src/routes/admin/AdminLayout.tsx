@@ -25,8 +25,9 @@ export function AdminLayout() {
   }
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh", background: "var(--color-bg)", color: "var(--color-text)", fontFamily: "var(--font-body)" }}>
+    <div className="admin-shell" style={{ display: "flex", minHeight: "100vh", background: "var(--color-bg)", color: "var(--color-text)", fontFamily: "var(--font-body)" }}>
       <aside
+        className="admin-sidebar"
         style={{
           width: 250,
           flex: "none",
@@ -38,7 +39,7 @@ export function AdminLayout() {
           borderRight: "1px solid var(--color-divider)",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 24, padding: "0 6px" }}>
+        <div className="admin-brand" style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 24, padding: "0 6px" }}>
           <span
             style={{
               width: 30,
@@ -64,7 +65,11 @@ export function AdminLayout() {
         <NavLink to="/admin/katalog" className="btn btn-ghost" style={navLinkStyle}>
           Katalog Model
         </NavLink>
+        <NavLink to="/admin/pengaturan" className="btn btn-ghost" style={navLinkStyle}>
+          Pengaturan
+        </NavLink>
         <div
+          className="admin-sidebar-footer"
           style={{
             marginTop: "auto",
             display: "flex",
@@ -87,7 +92,7 @@ export function AdminLayout() {
         </div>
       </aside>
 
-      <main style={{ flex: 1, padding: "44px 48px", maxWidth: 1080 }}>
+      <main className="admin-main" style={{ flex: 1, padding: "44px 48px", maxWidth: 1080 }}>
         <Outlet />
       </main>
     </div>

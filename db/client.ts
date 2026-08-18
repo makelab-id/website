@@ -9,8 +9,13 @@ import * as schema from "./schema.js";
 const dbPath = process.env.DATABASE_URL || "./data/makelab.sqlite";
 const resolvedPath = dbPath === ":memory:" ? dbPath : path.resolve(process.cwd(), dbPath);
 
+// Directory holding the sqlite file itself (or the OS temp dir for
+// `:memory:`/tmpfile test runs) — also where uploaded assets live, so both
+// share the same persistent Docker volume in production.
+export const dataDir = resolvedPath === ":memory:" ? path.resolve(process.cwd(), "data") : path.dirname(resolvedPath);
+
 if (resolvedPath !== ":memory:") {
-  fs.mkdirSync(path.dirname(resolvedPath), { recursive: true });
+  fs.mkdirSync(dataDir, { recursive: true });
 }
 
 const sqlite = new Database(resolvedPath);

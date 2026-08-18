@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ImagePlaceholder } from "../components/ImagePlaceholder";
 import { useSettings } from "../lib/api";
 import { buildGenericInquiryMessage, waLink } from "../lib/pricing";
@@ -35,7 +35,7 @@ const STEPS = [
     n: 1,
     bg: "var(--color-accent)",
     title: "Upload atau pilih model",
-    body: ".stl, .obj, .3mf, atau .step. Kalau file bermasalah, kami cek dan perbaiki dulu sebelum cetak.",
+    body: ".stl, .glb/.gltf, .3mf, .obj, atau .step. Kalau file bermasalah, kami cek dan perbaiki dulu sebelum cetak.",
   },
   {
     n: 2,
@@ -60,16 +60,19 @@ const LOGISTICS = [
 
 export function Home() {
   const { data: settings } = useSettings();
+  const navigate = useNavigate();
   const waHref = settings ? waLink(settings.whatsappNumber, buildGenericInquiryMessage()) : "#";
+
+  const goUploadWith = (file: File) => navigate("/quote", { state: { file } });
 
   return (
     <main>
       <section
+        className="mk-page mk-grid mk-stack-900"
         style={{
           maxWidth: 1180,
           margin: "0 auto",
           padding: "56px 24px 24px",
-          display: "grid",
           gridTemplateColumns: "1.15fr 0.85fr",
           gap: 48,
           alignItems: "center",
@@ -79,15 +82,12 @@ export function Home() {
           <span className="tag tag-accent-2" style={{ marginBottom: 18 }}>
             Yogyakarta, Indonesia
           </span>
-          <h1 style={{ fontSize: 62, margin: "14px 0 0", maxWidth: "15ch", textWrap: "balance" }}>
+          <h1 style={{ fontSize: "clamp(34px, 7vw, 62px)", margin: "14px 0 0", maxWidth: "15ch", textWrap: "balance" }}>
             Kirim file, dapat harga, kami cetak.
           </h1>
-          <p style={{ fontSize: 19, lineHeight: 1.6, maxWidth: "46ch", margin: "20px 0 8px", color: "var(--color-neutral-800)" }}>
-            Upload file .stl kamu dan lihat estimasi harga langsung di layar. Belum punya file? Pilih dari katalog
-            kami — part Tamiya, RC, dan aksesori airsoft yang siap cetak.
-          </p>
-          <p style={{ fontSize: 14, color: "var(--color-neutral-600)", marginBottom: 26 }}>
-            Upload your .stl and get an instant estimate — or pick a ready-to-print model from our library.
+          <p style={{ fontSize: 19, lineHeight: 1.6, maxWidth: "46ch", margin: "20px 0 26px", color: "var(--color-neutral-800)" }}>
+            Upload file .stl kamu dan lihat estimasi harga langsung di layar. <br/>
+            Belum punya file? Pilih dari katalog kami — part Tamiya, RC, dan aksesori airsoft yang siap cetak.
           </p>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
             <Link to="/quote" className="btn btn-primary" style={{ padding: "14px 26px", fontSize: 15 }}>
@@ -97,13 +97,9 @@ export function Home() {
               Lihat katalog
             </Link>
           </div>
-          <div style={{ display: "flex", gap: 26, marginTop: 34, flexWrap: "wrap", fontSize: 13, color: "var(--color-neutral-700)" }}>
-            <span>3–5 hari kerja</span>
-            <span>Ambil sendiri di Yogya</span>
-            <span>File rusak? Kami perbaiki</span>
-          </div>
+
         </div>
-        <div
+        <label
           style={{
             position: "relative",
             aspectRatio: "1",
@@ -111,15 +107,66 @@ export function Home() {
             overflow: "hidden",
             background: "var(--color-accent-2-200)",
             boxShadow: "var(--shadow-lg)",
+            cursor: "pointer",
+            display: "block",
+          }}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            const f = e.dataTransfer.files?.[0];
+            if (f) goUploadWith(f);
           }}
         >
-          <div className="washed" style={{ position: "absolute", inset: 0 }}>
-            <ImagePlaceholder category="hero" label="Foto printer / hasil cetak" />
+          <input
+            type="file"
+            accept=".stl,.glb,.gltf,.3mf,.obj,.step,.stp,.ply"
+            style={{ position: "absolute", opacity: 0, width: 0, height: 0 }}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) goUploadWith(f);
+              e.target.value = "";
+            }}
+          />
+          <div
+            className="washed"
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              textAlign: "center",
+              gap: 12,
+              padding: "12px 32px",
+            }}
+          >
+            <span
+              style={{
+                width: 54,
+                height: 54,
+                borderRadius: "var(--radius-sm)",
+                background: "var(--color-accent-200)",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8c491a" strokeWidth="2.75" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 3v13" />
+                <path d="m6 9 6-6 6 6" />
+                <path d="M4 21h16" />
+              </svg>
+            </span>
+            <h3 style={{ fontSize: 24, margin: "6px 0 0" }}>Tarik file ke sini, atau klik untuk pilih</h3>
+            <p style={{ margin: 0, fontSize: 14, color: "var(--color-neutral-700)" }}>
+              .stl · .glb/.gltf · .3mf · .obj · .step — maksimal 100 MB per file
+            </p>
           </div>
-        </div>
+        </label>
       </section>
 
-      <section style={{ maxWidth: 1180, margin: "24px auto 0", padding: "0 24px" }}>
+      <section className="mk-page" style={{ maxWidth: 1180, margin: "24px auto 0", padding: "0 24px" }}>
         <div
           style={{
             display: "flex",
@@ -160,10 +207,10 @@ export function Home() {
         </div>
       </section>
 
-      <section style={{ maxWidth: 1180, margin: "0 auto", padding: "64px 24px 24px" }}>
+      <section className="mk-page" style={{ maxWidth: 1180, margin: "0 auto", padding: "64px 24px 24px" }}>
         <h6 style={{ color: "var(--color-accent)", marginBottom: 6 }}>How it works</h6>
-        <h2 style={{ fontSize: 38, marginBottom: 32 }}>Tiga langkah saja</h2>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 26 }}>
+        <h2 style={{ fontSize: "clamp(26px, 5vw, 38px)", marginBottom: 32 }}>Tiga langkah saja</h2>
+        <div className="mk-grid mk-grid-3" style={{ gap: 26 }}>
           {STEPS.map((step) => (
             <div key={step.n} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <span
@@ -189,10 +236,10 @@ export function Home() {
         </div>
       </section>
 
-      <section style={{ maxWidth: 1180, margin: "0 auto", padding: "64px 24px 24px" }}>
+      <section className="mk-page" style={{ maxWidth: 1180, margin: "0 auto", padding: "64px 24px 24px" }}>
         <h6 style={{ color: "var(--color-accent)", marginBottom: 6 }}>Material</h6>
-        <h2 style={{ fontSize: 38, marginBottom: 32 }}>Yang kami cetak sehari-hari</h2>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 20 }}>
+        <h2 style={{ fontSize: "clamp(26px, 5vw, 38px)", marginBottom: 32 }}>Yang kami cetak sehari-hari</h2>
+        <div className="mk-grid mk-grid-4" style={{ gap: 20 }}>
           {MATERIALS.map((m) => (
             <div key={m.title} className="card elev-sm">
               <span className="card-kicker">{m.kicker}</span>
@@ -204,14 +251,13 @@ export function Home() {
         </div>
       </section>
 
-      <section style={{ maxWidth: 1180, margin: "0 auto", padding: "64px 24px 24px" }}>
+      <section className="mk-page" style={{ maxWidth: 1180, margin: "0 auto", padding: "64px 24px 24px" }}>
         <div
+          className="mk-grid mk-grid-4"
           style={{
             background: "var(--color-surface)",
             borderRadius: "calc(var(--radius-lg) * 1.15)",
             padding: 44,
-            display: "grid",
-            gridTemplateColumns: "repeat(4, 1fr)",
             gap: 32,
           }}
         >
@@ -224,7 +270,7 @@ export function Home() {
         </div>
       </section>
 
-      <section style={{ maxWidth: 1180, margin: "0 auto", padding: "64px 24px 0" }}>
+      <section className="mk-page" style={{ maxWidth: 1180, margin: "0 auto", padding: "64px 24px 0" }}>
         <div
           style={{
             display: "flex",
@@ -235,11 +281,11 @@ export function Home() {
             background: "var(--color-accent)",
             color: "var(--color-bg)",
             borderRadius: "calc(var(--radius-lg) * 1.15)",
-            padding: "44px 48px",
+            padding: "clamp(28px, 6vw, 44px) clamp(24px, 6vw, 48px)",
           }}
         >
           <div>
-            <h2 style={{ fontSize: 34, margin: "0 0 8px", color: "var(--color-bg)" }}>Siap cetak hari ini?</h2>
+            <h2 style={{ fontSize: "clamp(24px, 4.5vw, 34px)", margin: "0 0 8px", color: "var(--color-bg)" }}>Siap cetak hari ini?</h2>
             <p style={{ margin: 0, fontSize: 15, opacity: 0.9 }}>Upload file untuk estimasi, lalu lanjut chat untuk harga final.</p>
           </div>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
@@ -258,6 +304,6 @@ export function Home() {
           </div>
         </div>
       </section>
-    </main>
+    </main >
   );
 }

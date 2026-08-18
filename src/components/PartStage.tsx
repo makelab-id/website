@@ -9,12 +9,15 @@ import * as THREE from "three";
 export interface PartStageProps {
   color: string;
   shape?: "bracket" | "knot";
+  // Real geometry parsed from an uploaded .stl (see src/lib/stl.ts). When
+  // set, this replaces the procedural placeholder shape entirely.
+  geometry?: THREE.BufferGeometry | null;
   spin?: boolean;
   className?: string;
   style?: React.CSSProperties;
 }
 
-export function PartStage({ color, shape = "bracket", spin = true, className, style }: PartStageProps) {
+export function PartStage({ color, shape = "bracket", geometry = null, spin = true, className, style }: PartStageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   // Read inside the render loop instead of restarting the whole scene on
   // every color change — the original custom element couldn't react to
@@ -37,6 +40,7 @@ export function PartStage({ color, shape = "bracket", spin = true, className, st
     const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
     camera.position.set(3.2, 2.2, 4.2);
     camera.lookAt(0, 0, 0);
+    const baseCameraDistance = camera.position.length();
     const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
@@ -55,15 +59,43 @@ export function PartStage({ color, shape = "bracket", spin = true, className, st
       flatShading: true,
     });
     const group = new THREE.Group();
-    if (shape === "knot") {
-      group.add(new THREE.Mesh(new THREE.TorusKnotGeometry(1.05, 0.34, 120, 12), material));
+    // `geometry` (an uploaded .stl) is owned and disposed by the caller —
+    // only geometries this effect creates itself go in here for cleanup.
+    const ownedGeometries: THREE.BufferGeometry[] = [];
+    if (geometry) {
+      // Real uploaded mesh: center it and normalize its size so it fills
+      // the same viewing volume the procedural placeholders were tuned
+      // for, regardless of the model's real-world scale in mm.
+      geometry.computeBoundingBox();
+      const bbox = geometry.boundingBox!;
+      const center = new THREE.Vector3();
+      bbox.getCenter(center);
+      const size = new THREE.Vector3();
+      bbox.getSize(size);
+      const maxDim = Math.max(size.x, size.y, size.z) || 1;
+      const target = 2.6;
+
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.set(-center.x, -center.y, -center.z);
+      group.add(mesh);
+      group.scale.setScalar(target / maxDim);
+    } else if (shape === "knot") {
+      const knotGeo = new THREE.TorusKnotGeometry(1.05, 0.34, 120, 12);
+      ownedGeometries.push(knotGeo);
+      group.add(new THREE.Mesh(knotGeo, material));
     } else {
-      const plate = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.34, 1.6), material);
+      const plateGeo = new THREE.BoxGeometry(2.5, 0.34, 1.6);
+      const wallGeo = new THREE.BoxGeometry(0.34, 1.5, 1.6);
+      const gussetGeo = new THREE.CylinderGeometry(0.9, 0.9, 1.5, 3);
+      const bossGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.5, 24);
+      ownedGeometries.push(plateGeo, wallGeo, gussetGeo, bossGeo);
+
+      const plate = new THREE.Mesh(plateGeo, material);
       group.add(plate);
-      const wall = new THREE.Mesh(new THREE.BoxGeometry(0.34, 1.5, 1.6), material);
+      const wall = new THREE.Mesh(wallGeo, material);
       wall.position.set(-1.08, 0.75, 0);
       group.add(wall);
-      const gusset = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 1.5, 3), material);
+      const gusset = new THREE.Mesh(gussetGeo, material);
       gusset.rotation.set(Math.PI / 2, 0, Math.PI / 4);
       gusset.position.set(-0.5, 0.42, 0);
       group.add(gusset);
@@ -71,7 +103,7 @@ export function PartStage({ color, shape = "bracket", spin = true, className, st
         [0.75, 0.45],
         [0.75, -0.45],
       ] as const) {
-        const boss = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.5, 24), material);
+        const boss = new THREE.Mesh(bossGeo, material);
         boss.position.set(x, 0.16, z);
         group.add(boss);
       }
@@ -82,6 +114,14 @@ export function PartStage({ color, shape = "bracket", spin = true, className, st
     let drag: { x: number; y: number } | null = null;
     let spinX = 0.28;
     let spinY = 0;
+    let zoom = 1;
+
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      zoom = Math.max(0.5, Math.min(2.5, zoom * (1 + e.deltaY * 0.001)));
+      camera.position.setLength(baseCameraDistance * zoom);
+    };
+    canvas.addEventListener("wheel", onWheel, { passive: false });
 
     const onPointerDown = (e: PointerEvent) => {
       drag = { x: e.clientX, y: e.clientY };
@@ -130,20 +170,19 @@ export function PartStage({ color, shape = "bracket", spin = true, className, st
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
+      canvas.removeEventListener("wheel", onWheel);
       canvas.removeEventListener("pointerdown", onPointerDown);
       canvas.removeEventListener("pointerup", onPointerUp);
       canvas.removeEventListener("pointermove", onPointerMove);
       renderer.dispose();
       material.dispose();
-      scene.traverse((obj) => {
-        if (obj instanceof THREE.Mesh) obj.geometry.dispose();
-      });
+      for (const geo of ownedGeometries) geo.dispose();
       container.removeChild(canvas);
     };
-    // Only shape changes require rebuilding the scene; color/spin are read
-    // live from refs every frame instead.
+    // Only shape/geometry changes require rebuilding the scene; color/spin
+    // are read live from refs every frame instead.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shape]);
+  }, [shape, geometry]);
 
   return (
     <div

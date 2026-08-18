@@ -64,6 +64,12 @@ const RESOURCES = [
     patch: { percent: 80 },
   },
   {
+    path: "/api/finish-options",
+    valid: { label: "Anodized", price: 25000 },
+    invalid: { label: "", price: -1 },
+    patch: { price: 30000 },
+  },
+  {
     path: "/api/models",
     valid: {
       slot: "test-slot-1",

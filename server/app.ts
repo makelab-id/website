@@ -4,9 +4,11 @@ import { materialsRouter } from "./routes/materials.js";
 import { colorsRouter } from "./routes/colors.js";
 import { qualityOptionsRouter } from "./routes/qualityOptions.js";
 import { infillOptionsRouter } from "./routes/infillOptions.js";
+import { finishOptionsRouter } from "./routes/finishOptions.js";
 import { modelsRouter } from "./routes/models.js";
 import { settingsRouter } from "./routes/settings.js";
 import { adminAuthRouter } from "./routes/adminAuth.js";
+import { uploadsDir } from "./lib/uploads.js";
 
 /**
  * The API-only Express app, with no static file serving or Vite wiring.
@@ -17,12 +19,14 @@ export function createApiApp() {
   const app = express();
   app.use(express.json());
   app.use(cookieParser());
+  app.use("/uploads", express.static(uploadsDir));
 
   app.use("/api/admin", adminAuthRouter);
   app.use("/api/materials", materialsRouter);
   app.use("/api/colors", colorsRouter);
   app.use("/api/quality-options", qualityOptionsRouter);
   app.use("/api/infill-options", infillOptionsRouter);
+  app.use("/api/finish-options", finishOptionsRouter);
   app.use("/api/models", modelsRouter);
   app.use("/api/settings", settingsRouter);
 

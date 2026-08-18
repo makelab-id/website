@@ -5,15 +5,16 @@
 // next fetch (react-query invalidation keeps this page in sync with itself
 // too).
 import type { ReactNode } from "react";
-import { useColors, useInfillOptions, useMaterials, useQualityOptions, useSettings } from "../../lib/api";
+import { useColors, useFinishOptions, useInfillOptions, useMaterials, useQualityOptions, useSettings } from "../../lib/api";
 import {
   useColorMutations,
+  useFinishOptionMutations,
   useInfillOptionMutations,
   useMaterialMutations,
   useQualityOptionMutations,
   useUpdateSettings,
 } from "../../lib/adminApi";
-import type { Color, InfillOption, Material, QualityOption } from "../../lib/types";
+import type { Color, FinishOption, InfillOption, Material, QualityOption } from "../../lib/types";
 import { CommitInput } from "./CommitInput";
 
 export function AdminCalculator() {
@@ -21,12 +22,14 @@ export function AdminCalculator() {
   const { data: colors } = useColors();
   const { data: qualityOptions } = useQualityOptions();
   const { data: infillOptions } = useInfillOptions();
+  const { data: finishOptions } = useFinishOptions();
   const { data: settings } = useSettings();
 
   const materialMut = useMaterialMutations();
   const colorMut = useColorMutations();
   const qualityMut = useQualityOptionMutations();
   const infillMut = useInfillOptionMutations();
+  const finishMut = useFinishOptionMutations();
   const settingsMut = useUpdateSettings();
 
   return (
@@ -46,7 +49,7 @@ export function AdminCalculator() {
       <p style={{ fontSize: 13, color: "var(--color-neutral-600)", margin: "0 0 12px" }}>
         Tarif per gram dan densitas — tandai "Coming soon" untuk material yang belum bisa dipilih pelanggan.
       </p>
-      <div className="card" style={{ padding: 0, overflow: "hidden", gap: 0, marginBottom: 36 }}>
+      <div className="card" style={{ padding: 0, overflow: "auto", gap: 0, marginBottom: 36 }}>
         <table className="table">
           <thead>
             <tr>
@@ -74,7 +77,7 @@ export function AdminCalculator() {
         Multiplier waktu: di atas 1 = lebih lama cetak, di bawah 1 = lebih cepat. Pilih salah satu sebagai default di
         form.
       </p>
-      <div className="card" style={{ padding: 0, overflow: "hidden", gap: 0, marginBottom: 36 }}>
+      <div className="card" style={{ padding: 0, overflow: "auto", gap: 0, marginBottom: 36 }}>
         <table className="table">
           <thead>
             <tr>
@@ -106,7 +109,7 @@ export function AdminCalculator() {
       <p style={{ fontSize: 13, color: "var(--color-neutral-600)", margin: "0 0 12px" }}>
         Persentase yang tampil ke pelanggan, dan fraksi volume terisi yang dipakai untuk hitung berat.
       </p>
-      <div className="card" style={{ padding: 0, overflow: "hidden", gap: 0, marginBottom: 36 }}>
+      <div className="card" style={{ padding: 0, overflow: "auto", gap: 0, marginBottom: 36 }}>
         <table className="table">
           <thead>
             <tr>
@@ -146,6 +149,20 @@ export function AdminCalculator() {
         ))}
       </div>
 
+      <SectionHeader
+        title="Finishing"
+        onAdd={() => finishMut.create.mutate({ label: "Finishing baru", price: 0, sortOrder: (finishOptions?.length ?? 0) })}
+        addLabel="+ Tambah finishing"
+      />
+      <p style={{ fontSize: 13, color: "var(--color-neutral-600)", margin: "0 0 12px" }}>
+        Opsi finishing yang bisa dipilih pelanggan di form Quote, beserta tambahan biaya per pcs.
+      </p>
+      <div style={{ display: "grid", gap: 10, marginBottom: 36 }}>
+        {finishOptions?.map((f) => (
+          <FinishRow key={f.id} row={f} onUpdate={finishMut.update.mutate} onRemove={() => finishMut.remove.mutate(f.id)} />
+        ))}
+      </div>
+
       <h3 style={{ fontSize: 19, marginBottom: 10 }}>Komponen biaya lain</h3>
       <div style={{ background: "var(--color-accent-2-100)", borderRadius: "var(--radius-lg)", padding: "18px 22px", marginBottom: 18 }}>
         <h3 style={{ fontSize: 14, margin: "0 0 8px", color: "var(--color-accent-2-900)", textTransform: "uppercase", letterSpacing: "0.02em" }}>
@@ -161,7 +178,7 @@ export function AdminCalculator() {
         </p>
       </div>
       {settings && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 18 }}>
+        <div className="mk-grid mk-grid-3" style={{ gap: 18 }}>
           <Field label="Waktu mesin (Rp / jam)">
             <CommitInput type="number" min={0} step={500} value={settings.machineRatePerHour} onCommit={(v) => settingsMut.mutate({ machineRatePerHour: Number(v) || 0 })} />
           </Field>
@@ -171,20 +188,28 @@ export function AdminCalculator() {
           <Field label="Express markup (%)">
             <CommitInput type="number" min={0} step={5} value={Math.round(settings.expressMarkupPct * 100)} onCommit={(v) => settingsMut.mutate({ expressMarkupPct: (Number(v) || 0) / 100 })} />
           </Field>
-          <Field label="Amplas halus (Rp / pcs)">
-            <CommitInput type="number" min={0} step={500} value={settings.finishCostSand} onCommit={(v) => settingsMut.mutate({ finishCostSand: Number(v) || 0 })} />
-          </Field>
-          <Field label="Amplas + cat (Rp / pcs)">
-            <CommitInput type="number" min={0} step={500} value={settings.finishCostPaint} onCommit={(v) => settingsMut.mutate({ finishCostPaint: Number(v) || 0 })} />
-          </Field>
           <Field label="Diskon dari jumlah (pcs)">
             <CommitInput type="number" min={1} step={1} value={settings.bulkQtyThreshold} onCommit={(v) => settingsMut.mutate({ bulkQtyThreshold: Math.max(1, Number(v) || 1) })} />
           </Field>
           <Field label="Diskon jumlah (%)">
             <CommitInput type="number" min={0} step={5} value={Math.round(settings.bulkDiscountPct * 100)} onCommit={(v) => settingsMut.mutate({ bulkDiscountPct: (Number(v) || 0) / 100 })} />
           </Field>
+          <Field label="Ketebalan shell (mm)">
+            <CommitInput
+              type="number"
+              min={0.1}
+              max={10}
+              step={0.1}
+              value={settings.shellThicknessMm}
+              onCommit={(v) => settingsMut.mutate({ shellThicknessMm: Number(v) || 0.1 })}
+            />
+          </Field>
         </div>
       )}
+      <p style={{ fontSize: 12, color: "var(--color-neutral-600)", marginTop: 10 }}>
+        Ketebalan shell dipakai untuk memperkirakan berapa bagian model yang tetap tercetak solid (dinding luar +
+        lapisan atas/bawah) walau infill-nya rendah — bukan cuma volume × persen infill.
+      </p>
     </div>
   );
 }
@@ -340,6 +365,34 @@ function ColorRow({
         step={500}
         value={row.extraPrice}
         onCommit={(v) => onUpdate({ id: row.id, extraPrice: Number(v) || 0 })}
+        placeholder="Tambahan Rp"
+        style={{ width: 130 }}
+      />
+      <button className="btn btn-secondary" style={{ padding: "8px 14px" }} onClick={onRemove}>
+        Hapus
+      </button>
+    </div>
+  );
+}
+
+function FinishRow({
+  row,
+  onUpdate,
+  onRemove,
+}: {
+  row: FinishOption;
+  onUpdate: (vars: { id: number } & Partial<FinishOption>) => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <CommitInput type="text" value={row.label} onCommit={(v) => onUpdate({ id: row.id, label: v })} style={{ flex: 1, maxWidth: 260 }} />
+      <CommitInput
+        type="number"
+        min={0}
+        step={500}
+        value={row.price}
+        onCommit={(v) => onUpdate({ id: row.id, price: Number(v) || 0 })}
         placeholder="Tambahan Rp"
         style={{ width: 130 }}
       />

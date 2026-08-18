@@ -1,0 +1,1 @@
+ALTER TABLE `settings` ADD `shell_thickness_mm` real DEFAULT 1.2 NOT NULL;

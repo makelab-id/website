@@ -1,0 +1,1 @@
+ALTER TABLE `models` ADD `image_url` text;

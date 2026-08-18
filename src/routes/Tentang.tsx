@@ -5,7 +5,7 @@ import { buildGenericInquiryMessage, waLink } from "../lib/pricing";
 const FAQS = [
   {
     q: "Format file apa yang diterima?",
-    a: ".stl, .obj, .3mf, .ply, dan .step / .stp. Kalau punya file CAD lain, kirim saja — biasanya masih bisa kami buka.",
+    a: ".stl, .glb / .gltf, .3mf, .obj, .ply, dan .step / .stp. Kalau punya file CAD lain, kirim saja — biasanya masih bisa kami buka.",
   },
   {
     q: "Kenapa harganya berupa rentang?",
@@ -30,19 +30,15 @@ export function Tentang() {
   const waHref = settings ? waLink(settings.whatsappNumber, buildGenericInquiryMessage()) : "#";
 
   return (
-    <main style={{ maxWidth: 1180, margin: "0 auto", padding: "44px 24px 0" }}>
+    <main className="mk-page" style={{ maxWidth: 1180, margin: "0 auto", padding: "44px 24px 0" }}>
       <h6 style={{ color: "var(--color-accent)", marginBottom: 6 }}>About &amp; FAQ</h6>
-      <h1 style={{ fontSize: 44, margin: "0 0 10px" }}>Makelab — Design | Print | Create</h1>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 44, marginTop: 26, alignItems: "start" }}>
+      <h1 style={{ fontSize: "clamp(28px, 6vw, 44px)", margin: "0 0 10px" }}>Makelab — Design | Print | Create</h1>
+      <div className="mk-grid mk-stack-900" style={{ gridTemplateColumns: "1fr 1fr", gap: 44, marginTop: 26, alignItems: "start" }}>
         <div>
           <p style={{ fontSize: 17, lineHeight: 1.65, color: "var(--color-neutral-800)" }}>
             Kami workshop kecil di Yogyakarta yang mengerjakan tiga hal: desain 3D, jasa cetak 3D, dan produk cetak
             yang siap kirim. Sebagian besar pelanggan kami penghobi Tamiya, RC, dan airsoft — jadi kami terbiasa
             dengan part kecil yang harus presisi dan kuat.
-          </p>
-          <p style={{ fontSize: 15, lineHeight: 1.65, color: "var(--color-neutral-700)" }}>
-            A small workshop in Yogyakarta doing 3D design, 3D printing, and ready-to-ship printed products. Come by
-            to pick up your order, or we ship nationwide.
           </p>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 22 }}>
             <a className="btn btn-primary" href={waHref} target="_blank" rel="noopener noreferrer" style={{ padding: "13px 24px" }}>

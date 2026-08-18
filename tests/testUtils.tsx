@@ -19,6 +19,12 @@ export const MOCK_QUALITY = [{ id: 2, label: "0,20 mm — standar", timeMultipli
 
 export const MOCK_INFILL = [{ id: 2, label: "25% — umum", percent: 25, fillFraction: 0.5, isDefault: true, sortOrder: 1 }];
 
+export const MOCK_FINISH = [
+  { id: 1, label: "Apa adanya", price: 0, sortOrder: 0 },
+  { id: 2, label: "Amplas halus", price: 15000, sortOrder: 1 },
+  { id: 3, label: "Amplas + cat", price: 55000, sortOrder: 2 },
+];
+
 export const MOCK_MODELS = [
   {
     id: 1,
@@ -54,9 +60,7 @@ export const MOCK_SETTINGS = {
   expressMarkupPct: 0.4,
   bulkQtyThreshold: 5,
   bulkDiscountPct: 0.1,
-  finishCostNone: 0,
-  finishCostSand: 15000,
-  finishCostPaint: 55000,
+  shellThicknessMm: 1.2,
 };
 
 const ROUTES: Record<string, unknown> = {
@@ -64,6 +68,7 @@ const ROUTES: Record<string, unknown> = {
   "/api/colors": MOCK_COLORS,
   "/api/quality-options": MOCK_QUALITY,
   "/api/infill-options": MOCK_INFILL,
+  "/api/finish-options": MOCK_FINISH,
   "/api/models": MOCK_MODELS,
   "/api/settings": MOCK_SETTINGS,
 };

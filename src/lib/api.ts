@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import type { Color, InfillOption, Material, PrintModel, QualityOption, Settings } from "./types";
+import type { Color, FinishOption, InfillOption, Material, PrintModel, QualityOption, Settings } from "./types";
 
 const BASE = "/api";
 
@@ -27,6 +27,10 @@ export function useInfillOptions() {
   return useQuery({ queryKey: ["infill-options"], queryFn: () => getJson<InfillOption[]>("/infill-options") });
 }
 
+export function useFinishOptions() {
+  return useQuery({ queryKey: ["finish-options"], queryFn: () => getJson<FinishOption[]>("/finish-options") });
+}
+
 export function useModels() {
   return useQuery({ queryKey: ["models"], queryFn: () => getJson<PrintModel[]>("/models") });
 }
@@ -44,6 +48,7 @@ export function useQuoteConfig() {
   const colors = useColors();
   const quality = useQualityOptions();
   const infill = useInfillOptions();
+  const finish = useFinishOptions();
   const settings = useSettings();
 
   return {
@@ -51,9 +56,16 @@ export function useQuoteConfig() {
     colors: colors.data,
     quality: quality.data,
     infill: infill.data,
+    finish: finish.data,
     settings: settings.data,
     isLoading:
-      materials.isLoading || colors.isLoading || quality.isLoading || infill.isLoading || settings.isLoading,
-    isError: materials.isError || colors.isError || quality.isError || infill.isError || settings.isError,
+      materials.isLoading ||
+      colors.isLoading ||
+      quality.isLoading ||
+      infill.isLoading ||
+      finish.isLoading ||
+      settings.isLoading,
+    isError:
+      materials.isError || colors.isError || quality.isError || infill.isError || finish.isError || settings.isError,
   };
 }

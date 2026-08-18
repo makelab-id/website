@@ -1,9 +1,11 @@
 import { Suspense, lazy, useEffect, useMemo, useReducer, useRef } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import type { BufferGeometry } from "three";
+import type { ParsedModel } from "../lib/geometryMetrics";
 import { useQuoteConfig } from "../lib/api";
 import {
   type Delivery,
   type FakeFile,
-  type Finish,
   SAMPLE_FILE,
   buildQuoteMessage,
   calc,
@@ -19,44 +21,60 @@ import { SegRadioGroup } from "../components/ui/SegRadioGroup";
 // other route (and /quote before a file is even picked) doesn't pay for it.
 const PartStage = lazy(() => import("../components/PartStage").then((m) => ({ default: m.PartStage })));
 
+type ModelStatus = "idle" | "loading" | "error";
+
 interface QuoteState {
   file: FakeFile | null;
+  geometry: BufferGeometry | null;
+  modelStatus: ModelStatus;
+  modelError: string | null;
   materialName: string;
   qualityLabel: string;
   infillPercent: number;
   colorName: string;
   scale: number;
   qty: number;
-  finish: Finish;
+  finishLabel: string;
   delivery: Delivery;
 }
 
 const initialState: QuoteState = {
   file: null,
+  geometry: null,
+  modelStatus: "idle",
+  modelError: null,
   materialName: "",
   qualityLabel: "",
   infillPercent: 0,
   colorName: "",
   scale: 100,
   qty: 1,
-  finish: "none",
+  finishLabel: "",
   delivery: "reguler",
 };
 
 type QuoteAction =
   | { type: "SET_FILE"; file: FakeFile | null }
-  | { type: "SET_FIELD"; field: "materialName" | "qualityLabel" | "colorName"; value: string }
+  | { type: "MODEL_LOADING" }
+  | { type: "MODEL_LOADED"; file: FakeFile; geometry: BufferGeometry }
+  | { type: "MODEL_ERROR"; message: string }
+  | { type: "SET_FIELD"; field: "materialName" | "qualityLabel" | "colorName" | "finishLabel"; value: string }
   | { type: "SET_INFILL"; value: number }
   | { type: "SET_SCALE"; value: number }
   | { type: "SET_QTY"; value: number }
-  | { type: "SET_FINISH"; value: Finish }
   | { type: "SET_DELIVERY"; value: Delivery }
-  | { type: "INIT_DEFAULTS"; material: string; quality: string; infill: number; color: string };
+  | { type: "INIT_DEFAULTS"; material: string; quality: string; infill: number; color: string; finish: string };
 
 function reducer(state: QuoteState, action: QuoteAction): QuoteState {
   switch (action.type) {
     case "SET_FILE":
-      return { ...state, file: action.file };
+      return { ...state, file: action.file, geometry: null, modelStatus: "idle", modelError: null };
+    case "MODEL_LOADING":
+      return { ...state, modelStatus: "loading", modelError: null };
+    case "MODEL_LOADED":
+      return { ...state, file: action.file, geometry: action.geometry, modelStatus: "idle", modelError: null };
+    case "MODEL_ERROR":
+      return { ...state, geometry: null, modelStatus: "error", modelError: action.message };
     case "SET_FIELD":
       return { ...state, [action.field]: action.value };
     case "SET_INFILL":
@@ -65,8 +83,6 @@ function reducer(state: QuoteState, action: QuoteAction): QuoteState {
       return { ...state, scale: action.value };
     case "SET_QTY":
       return { ...state, qty: Math.max(1, Math.min(200, action.value || 1)) };
-    case "SET_FINISH":
-      return { ...state, finish: action.value };
     case "SET_DELIVERY":
       return { ...state, delivery: action.value };
     case "INIT_DEFAULTS":
@@ -76,17 +92,12 @@ function reducer(state: QuoteState, action: QuoteAction): QuoteState {
         qualityLabel: state.qualityLabel || action.quality,
         infillPercent: state.infillPercent || action.infill,
         colorName: state.colorName || action.color,
+        finishLabel: state.finishLabel || action.finish,
       };
     default:
       return state;
   }
 }
-
-const FINISH_OPTIONS = [
-  { value: "none" as Finish, label: "Apa adanya" },
-  { value: "sand" as Finish, label: "Amplas halus" },
-  { value: "paint" as Finish, label: "Amplas + cat" },
-];
 
 const DELIVERY_OPTIONS = [
   { value: "reguler" as Delivery, label: "Reguler 3–5 hari" },
@@ -94,12 +105,14 @@ const DELIVERY_OPTIONS = [
 ];
 
 export function Quote() {
-  const { materials, colors, quality, infill, settings, isLoading, isError } = useQuoteConfig();
+  const { materials, colors, quality, infill, finish, settings, isLoading, isError } = useQuoteConfig();
   const [state, dispatch] = useReducer(reducer, initialState);
   const initialized = useRef(false);
+  const location = useLocation();
+  const navigate = useNavigate();
 
   useEffect(() => {
-    if (initialized.current || !materials || !colors || !quality || !infill) return;
+    if (initialized.current || !materials || !colors || !quality || !infill || !finish) return;
     const activeMaterials = materials.filter((m) => !m.comingSoon);
     dispatch({
       type: "INIT_DEFAULTS",
@@ -107,22 +120,32 @@ export function Quote() {
       quality: (quality.find((q) => q.isDefault) ?? quality[0])?.label ?? "",
       infill: (infill.find((i) => i.isDefault) ?? infill[0])?.percent ?? 0,
       color: colors[0]?.name ?? "",
+      finish: finish[0]?.label ?? "",
     });
     initialized.current = true;
-  }, [materials, colors, quality, infill]);
+  }, [materials, colors, quality, infill, finish]);
+
+  // Dispose the previous mesh's GPU/CPU buffers whenever it's replaced by a
+  // new upload or cleared, and on unmount.
+  useEffect(() => {
+    return () => {
+      state.geometry?.dispose();
+    };
+  }, [state.geometry]);
 
   const selectedMaterial = materials?.find((m) => m.name === state.materialName);
   const selectedQuality = quality?.find((q) => q.label === state.qualityLabel);
   const selectedInfill = infill?.find((i) => i.percent === state.infillPercent);
   const selectedColor = colors?.find((c) => c.name === state.colorName);
+  const selectedFinish = finish?.find((f) => f.label === state.finishLabel);
 
   const result = useMemo(() => {
-    if (!selectedMaterial || !selectedQuality || !selectedInfill || !selectedColor || !settings) return null;
+    if (!selectedMaterial || !selectedQuality || !selectedInfill || !selectedColor || !selectedFinish || !settings) return null;
     return calc({
       file: state.file,
       scale: state.scale,
       qty: state.qty,
-      finish: state.finish,
+      finish: selectedFinish,
       delivery: state.delivery,
       material: selectedMaterial,
       quality: selectedQuality,
@@ -130,11 +153,64 @@ export function Quote() {
       color: selectedColor,
       settings,
     });
-  }, [selectedMaterial, selectedQuality, selectedInfill, selectedColor, settings, state]);
+  }, [selectedMaterial, selectedQuality, selectedInfill, selectedColor, selectedFinish, settings, state]);
 
-  const onPick = (f: File) => dispatch({ type: "SET_FILE", file: fileFrom(f.name, f.size / 1024) });
+  // .stl, .glb/.gltf, and .3mf can be parsed client-side for real geometry;
+  // .obj/.ply/.step/.stp keep the byte-size heuristic from fileFrom() above.
+  // Each parser lives in its own module, loaded dynamically here (along
+  // with `three`, ~600KB) so routes other than an active /quote upload
+  // never pay for it — matches the lazy PartStage import below.
+  const loadParserFor = (name: string): Promise<(file: File) => Promise<ParsedModel>> | null => {
+    if (/\.stl$/i.test(name)) return import("../lib/stl").then((m) => m.parseStlFile);
+    if (/\.(glb|gltf)$/i.test(name)) return import("../lib/modelFile").then((m) => m.parseGltfFile);
+    if (/\.3mf$/i.test(name)) return import("../lib/modelFile").then((m) => m.parse3mfFile);
+    return null;
+  };
 
-  if (isLoading || !result || !selectedMaterial || !selectedQuality || !selectedInfill || !selectedColor || !settings) {
+  const onPick = (f: File) => {
+    dispatch({ type: "SET_FILE", file: fileFrom(f.name, f.size / 1024) });
+
+    const parserPromise = loadParserFor(f.name);
+    if (!parserPromise) return;
+
+    dispatch({ type: "MODEL_LOADING" });
+    parserPromise
+      .then((parse) => parse(f))
+      .then(({ geometry, volumeCm3, bboxMm, surfaceAreaMm2 }) => {
+        dispatch({
+          type: "MODEL_LOADED",
+          geometry,
+          file: { name: f.name, kb: f.size / 1024, vol: volumeCm3, bbox: bboxMm, surfaceAreaMm2 },
+        });
+      })
+      .catch((err) => {
+        dispatch({
+          type: "MODEL_ERROR",
+          message: err instanceof Error ? err.message : "Gagal membaca file model. Coba file lain.",
+        });
+      });
+  };
+
+  // Home's hero dropzone hands off a File via navigation state so it can
+  // land directly in the preview here instead of round-tripping the file.
+  useEffect(() => {
+    const incoming = (location.state as { file?: File } | null)?.file;
+    if (!incoming) return;
+    onPick(incoming);
+    navigate(location.pathname, { replace: true, state: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
+
+  if (
+    isLoading ||
+    !result ||
+    !selectedMaterial ||
+    !selectedQuality ||
+    !selectedInfill ||
+    !selectedColor ||
+    !selectedFinish ||
+    !settings
+  ) {
     return (
       <main style={{ maxWidth: 1180, margin: "0 auto", padding: "44px 24px 0" }}>
         <p style={{ color: "var(--color-neutral-700)" }}>
@@ -153,22 +229,22 @@ export function Quote() {
     infillPercent: state.infillPercent,
     scale: state.scale,
     qty: state.qty,
-    finish: state.finish,
+    finishLabel: state.finishLabel,
     delivery: state.delivery,
     total: result.total,
   });
   const waQuote = waLink(settings.whatsappNumber, quoteMsg);
 
   return (
-    <main style={{ maxWidth: 1180, margin: "0 auto", padding: "44px 24px 0" }}>
+    <main className="mk-page" style={{ maxWidth: 1180, margin: "0 auto", padding: "44px 24px 0" }}>
       <h6 style={{ color: "var(--color-accent)", marginBottom: 6 }}>Upload &amp; instant quote</h6>
-      <h1 style={{ fontSize: 44, margin: "0 0 10px" }}>Estimasi harga cetak</h1>
+      <h1 style={{ fontSize: "clamp(30px, 6vw, 44px)", margin: "0 0 10px" }}>Estimasi harga cetak</h1>
       <p style={{ maxWidth: "60ch", color: "var(--color-neutral-700)", fontSize: 15 }}>
         Angka di halaman ini adalah perkiraan otomatis dari ukuran file. Harga final selalu kami konfirmasi di
         WhatsApp setelah file dicek.
       </p>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 0.85fr", gap: 32, marginTop: 32, alignItems: "start" }}>
+      <div className="mk-grid mk-stack-900" style={{ gridTemplateColumns: "1fr 0.85fr", gap: 32, marginTop: 32, alignItems: "start" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
           {!state.file && (
             <>
@@ -178,7 +254,7 @@ export function Quote() {
                   flexDirection: "column",
                   alignItems: "flex-start",
                   gap: 12,
-                  padding: "52px 40px",
+                  padding: "clamp(28px, 8vw, 52px) clamp(20px, 6vw, 40px)",
                   border: "2px dashed var(--color-neutral-400)",
                   borderRadius: "calc(var(--radius-lg) * 1.15)",
                   background: "var(--color-neutral-100)",
@@ -194,7 +270,7 @@ export function Quote() {
               >
                 <input
                   type="file"
-                  accept=".stl,.obj,.3mf,.step,.stp,.ply"
+                  accept=".stl,.glb,.gltf,.3mf,.obj,.step,.stp,.ply"
                   style={{ position: "absolute", opacity: 0, width: 0, height: 0 }}
                   onChange={(e) => {
                     const f = e.target.files?.[0];
@@ -221,7 +297,7 @@ export function Quote() {
                 </span>
                 <h3 style={{ fontSize: 24, margin: "6px 0 0" }}>Tarik file ke sini, atau klik untuk pilih</h3>
                 <p style={{ margin: 0, fontSize: 14, color: "var(--color-neutral-700)" }}>
-                  .stl · .obj · .3mf · .step — maksimal 100 MB per file
+                  .stl · .glb/.gltf · .3mf · .obj · .step — maksimal 100 MB per file
                 </p>
               </label>
               <div>
@@ -244,7 +320,12 @@ export function Quote() {
                     {state.file.name}
                   </div>
                   <div style={{ fontSize: 12, color: "var(--color-neutral-700)" }}>
-                    {(state.file.kb / 1024).toFixed(1)} MB · siap dihitung
+                    {(state.file.kb / 1024).toFixed(1)} MB ·{" "}
+                    {state.modelStatus === "loading"
+                      ? "membaca geometri…"
+                      : state.geometry
+                        ? "geometri asli dimuat"
+                        : "siap dihitung"}
                   </div>
                 </div>
                 <button
@@ -255,10 +336,49 @@ export function Quote() {
                   Ganti file
                 </button>
               </div>
-              <div style={{ borderRadius: "var(--radius-lg)", overflow: "hidden", background: "var(--color-neutral-200)", height: 320 }}>
+              {state.modelStatus === "error" && (
+                <p
+                  style={{
+                    fontSize: 12,
+                    color: "var(--color-accent-700)",
+                    background: "var(--color-accent-100)",
+                    borderRadius: "var(--radius-sm)",
+                    padding: "8px 12px",
+                    margin: "0 0 14px",
+                  }}
+                >
+                  {state.modelError} Preview memakai bentuk contoh; estimasi tetap dihitung dari ukuran file.
+                </p>
+              )}
+              <div
+                style={{
+                  position: "relative",
+                  borderRadius: "var(--radius-lg)",
+                  overflow: "hidden",
+                  background: "var(--color-neutral-200)",
+                  height: "min(320px, 55vw)",
+                  minHeight: 220,
+                }}
+              >
                 <Suspense fallback={null}>
-                  <PartStage color={selectedColor.hex} />
+                  <PartStage color={selectedColor.hex} geometry={state.geometry} />
                 </Suspense>
+                {state.modelStatus === "loading" && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 13,
+                      color: "var(--color-neutral-700)",
+                      background: "color-mix(in srgb, var(--color-neutral-200) 70%, transparent)",
+                    }}
+                  >
+                    Membaca geometri file…
+                  </div>
+                )}
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
                 <span className="tag tag-neutral">
@@ -269,7 +389,9 @@ export function Quote() {
                 <span className="tag tag-accent-2">± {hoursText(result.hours)}</span>
               </div>
               <p style={{ fontSize: 12, color: "var(--color-neutral-600)", margin: "12px 0 0" }}>
-                Geser untuk memutar model. Preview ini representasi bentuk, bukan geometri asli file.
+                {state.geometry
+                  ? "Geser untuk memutar, scroll untuk zoom. Preview ini geometri asli dari file kamu."
+                  : "Geser untuk memutar model. Preview ini representasi bentuk, bukan geometri asli file."}
               </p>
             </div>
           )}
@@ -366,9 +488,9 @@ export function Quote() {
               <label>Finishing</label>
               <SegRadioGroup
                 name="mk-fin"
-                value={state.finish}
-                onChange={(value) => dispatch({ type: "SET_FINISH", value })}
-                options={FINISH_OPTIONS}
+                value={state.finishLabel}
+                onChange={(value) => dispatch({ type: "SET_FIELD", field: "finishLabel", value })}
+                options={(finish ?? []).map((f) => ({ value: f.label, label: f.label }))}
               />
             </div>
 
@@ -384,7 +506,7 @@ export function Quote() {
           </div>
         </div>
 
-        <aside style={{ position: "sticky", top: 104, display: "flex", flexDirection: "column", gap: 16 }}>
+        <aside className="mk-aside-sticky" style={{ position: "sticky", top: 104, display: "flex", flexDirection: "column", gap: 16 }}>
           <div style={{ background: "var(--color-surface)", borderRadius: "calc(var(--radius-lg) * 1.15)", padding: 30, boxShadow: "var(--shadow-md)" }}>
             <h6 style={{ color: "var(--color-accent)", marginBottom: 10 }}>Estimasi</h6>
             <div style={{ fontFamily: "var(--font-heading)", fontSize: 34, lineHeight: 1.15 }}>

@@ -1,18 +1,40 @@
 // Ported from Admin.dc.html's "Katalog Model" page — the list behind the
 // public Katalog screen. Each row expands into an edit form; the photo
-// slot renders the same category-tinted placeholder the public site uses
-// until a real photo pipeline exists (see src/components/ImagePlaceholder).
-import { useState } from "react";
+// slot shows the uploaded product photo once one exists, and falls back to
+// the same category-tinted placeholder the public site uses otherwise
+// (see src/components/ImagePlaceholder).
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useModels } from "../../lib/api";
-import { useModelMutations } from "../../lib/adminApi";
+import { useModelImageUpload, useModelMutations } from "../../lib/adminApi";
 import type { PrintModel } from "../../lib/types";
 import { ImagePlaceholder } from "../../components/ImagePlaceholder";
+import { Pagination } from "../../components/ui/Pagination";
 import { CommitInput } from "./CommitInput";
+
+const PAGE_SIZE = 8;
 
 export function AdminCatalog() {
   const { data: models } = useModels();
   const modelMut = useModelMutations();
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return models ?? [];
+    return (models ?? []).filter(
+      (m) => m.name.toLowerCase().includes(q) || m.category.toLowerCase().includes(q),
+    );
+  }, [models, search]);
+
+  useEffect(() => setPage(1), [search]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const pageItems = useMemo(
+    () => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [filtered, page],
+  );
 
   return (
     <div>
@@ -28,26 +50,48 @@ export function AdminCatalog() {
                 slot: `mk-new-${Date.now()}`,
                 category: "Tamiya",
                 name: "Model baru",
-                description: "",
-                sizeLabel: "",
+                description: "Deskripsi belum diisi.",
+                sizeLabel: "Ukuran belum diisi",
                 materialLabel: "PLA",
                 basePrice: 0,
                 active: true,
                 sortOrder: models?.length ?? 0,
               },
-              { onSuccess: (row) => setExpandedId(row.id) },
+              {
+                onSuccess: (row) => {
+                  setSearch("");
+                  setExpandedId(row.id);
+                  setPage(Math.max(1, Math.ceil(((models?.length ?? 0) + 1) / PAGE_SIZE)));
+                },
+              },
             )
           }
         >
           + Tambah model
         </button>
       </div>
-      <p style={{ maxWidth: "60ch", color: "var(--color-neutral-700)", fontSize: 14, marginBottom: 26 }}>
-        Model yang tampil di halaman Katalog. Tarik foto ke kotak gambar untuk menggantinya.
+      <p style={{ maxWidth: "60ch", color: "var(--color-neutral-700)", fontSize: 14, marginBottom: 10 }}>
+        Model yang tampil di halaman Katalog. Klik kotak gambar untuk mengunggah/mengganti foto.
       </p>
+      {modelMut.create.isError && (
+        <p style={{ color: "var(--color-accent)", fontSize: 13, marginBottom: 16 }}>
+          Gagal menambah model: {modelMut.create.error instanceof Error ? modelMut.create.error.message : "Terjadi kesalahan."}
+        </p>
+      )}
 
-      <div style={{ display: "grid", gap: 10, marginBottom: 60 }}>
-        {models?.map((m) => (
+      <div style={{ maxWidth: 320, marginBottom: 18 }}>
+        <input
+          type="search"
+          className="input"
+          placeholder="Cari nama atau kategori…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          aria-label="Cari model"
+        />
+      </div>
+
+      <div style={{ display: "grid", gap: 10, marginBottom: 20 }}>
+        {pageItems.map((m) => (
           <ModelRow
             key={m.id}
             row={m}
@@ -60,6 +104,15 @@ export function AdminCatalog() {
             }}
           />
         ))}
+        {models && filtered.length === 0 && (
+          <p style={{ color: "var(--color-neutral-600)", fontSize: 14 }}>
+            Tidak ada model yang cocok dengan pencarian.
+          </p>
+        )}
+      </div>
+
+      <div style={{ marginBottom: 60 }}>
+        <Pagination page={page} totalPages={totalPages} onChange={setPage} />
       </div>
     </div>
   );
@@ -102,11 +155,9 @@ function ModelRow({
       </div>
 
       {expanded && (
-        <div style={{ display: "flex", gap: 20, padding: 18, borderTop: "1px solid var(--color-divider)", alignItems: "flex-start" }}>
-          <div style={{ width: 150, height: 150, flex: "none", borderRadius: "var(--radius-md)", overflow: "hidden", background: "var(--color-neutral-200)" }}>
-            <ImagePlaceholder category={row.category} label="Foto produk" />
-          </div>
-          <div style={{ flex: 1, display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 10, alignItems: "end" }}>
+        <div className="admin-model-row" style={{ display: "flex", gap: 20, padding: 18, borderTop: "1px solid var(--color-divider)", alignItems: "flex-start", flexWrap: "wrap" }}>
+          <ModelImageTile row={row} />
+          <div className="admin-model-fields" style={{ flex: 1, minWidth: 260, display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 10, alignItems: "end" }}>
             <div className="field" style={{ gridColumn: "span 2" }}>
               <label>a. Nama</label>
               <CommitInput type="text" value={row.name} onCommit={(v) => onUpdate({ id: row.id, name: v })} />
@@ -136,6 +187,63 @@ function ModelRow({
             </button>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+function ModelImageTile({ row }: { row: PrintModel }) {
+  const upload = useModelImageUpload();
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (file) upload.mutate({ id: row.id, file });
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, flex: "none" }}>
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        title="Klik untuk upload foto"
+        style={{
+          width: 150,
+          height: 150,
+          padding: 0,
+          border: "none",
+          borderRadius: "var(--radius-md)",
+          overflow: "hidden",
+          background: "var(--color-neutral-200)",
+          cursor: upload.isPending ? "wait" : "pointer",
+          position: "relative",
+        }}
+        disabled={upload.isPending}
+      >
+        <ImagePlaceholder category={row.category} label="Klik untuk upload foto" src={row.imageUrl ?? undefined} />
+        {upload.isPending && (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "color-mix(in srgb, var(--color-bg) 55%, transparent)",
+              fontSize: 12,
+              color: "var(--color-text)",
+            }}
+          >
+            Mengunggah…
+          </div>
+        )}
+      </button>
+      <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" style={{ display: "none" }} onChange={onFileChange} />
+      {upload.isError && (
+        <span style={{ fontSize: 11, color: "var(--color-accent)", maxWidth: 150 }}>
+          {upload.error instanceof Error ? upload.error.message : "Upload gagal."}
+        </span>
       )}
     </div>
   );

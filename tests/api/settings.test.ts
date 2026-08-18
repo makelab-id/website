@@ -44,9 +44,7 @@ const FULL_SETTINGS = {
   expressMarkupPct: 0.4,
   bulkQtyThreshold: 5,
   bulkDiscountPct: 0.1,
-  finishCostNone: 0,
-  finishCostSand: 15000,
-  finishCostPaint: 55000,
+  shellThicknessMm: 1.2,
 };
 
 describe("GET /api/settings before seeding", () => {

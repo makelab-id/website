@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { Color, InfillOption, Material, QualityOption, Settings } from "../../src/lib/types";
+import type { Color, FinishOption, InfillOption, Material, QualityOption, Settings } from "../../src/lib/types";
 import {
+  type FakeFile,
   buildCatalogOrderMessage,
   buildGenericInquiryMessage,
   buildQuoteMessage,
@@ -24,6 +25,9 @@ const INFILL_UMUM: InfillOption = { id: 2, label: "25% — umum", percent: 25, f
 const BLACK: Color = { id: 1, name: "Hitam", hex: "#3a3632", extraPrice: 0, sortOrder: 0 };
 const PREMIUM: Color = { id: 6, name: "Gold", hex: "#d4af37", extraPrice: 5000, sortOrder: 5 };
 
+const FINISH_NONE: FinishOption = { id: 1, label: "Apa adanya", price: 0, sortOrder: 0 };
+const FINISH_SAND: FinishOption = { id: 2, label: "Amplas halus", price: 15000, sortOrder: 1 };
+
 const SETTINGS: Settings = {
   id: 1,
   whatsappNumber: "+62 812-3456-7890",
@@ -32,10 +36,12 @@ const SETTINGS: Settings = {
   expressMarkupPct: 0.4,
   bulkQtyThreshold: 5,
   bulkDiscountPct: 0.1,
-  finishCostNone: 0,
-  finishCostSand: 15000,
-  finishCostPaint: 55000,
+  shellThicknessMm: 1.2,
 };
+
+// A 20mm cube: round numbers make the shell-vs-infill math easy to verify
+// by hand. vol = 8 cm^3 = 8000 mm^3, surfaceAreaMm2 = 6 faces * 400mm^2.
+const CUBE_FILE: FakeFile = { name: "cube.stl", kb: 500, vol: 8, bbox: [20, 20, 20], surfaceAreaMm2: 2400 };
 
 describe("fileFrom", () => {
   it("derives a plausible volume from file size and clamps it to [2.5, 140] cm^3", () => {
@@ -48,6 +54,12 @@ describe("fileFrom", () => {
     const f = fileFrom("part.stl", 2100); // vol = 50
     const s = Math.cbrt(50) * 10;
     expect(f.bbox).toEqual([s * 1.6, s * 0.95, s * 0.72]);
+  });
+
+  it("derives a box surface area from that same bounding box", () => {
+    const f = fileFrom("part.stl", 2100);
+    const [w, d, h] = f.bbox;
+    expect(f.surfaceAreaMm2).toBeCloseTo(2 * (w * d + w * h + d * h), 6);
   });
 });
 
@@ -101,7 +113,7 @@ describe("calc", () => {
     file: null,
     scale: 100,
     qty: 1,
-    finish: "none" as const,
+    finish: FINISH_NONE,
     delivery: "reguler" as const,
     material: PLA,
     quality: QUALITY_STANDARD,
@@ -126,15 +138,38 @@ describe("calc", () => {
     expect(r.vol).toBe(50);
   });
 
-  it("derives grams from volume * infill fraction * material density", () => {
-    const r = calc(base);
-    expect(r.grams).toBeCloseTo(18 * 0.5 * 1.24, 6);
+  it("weighs the always-solid shell (surface area * shell thickness) at full density, and only the interior at the infill fraction", () => {
+    const r = calc({ ...base, file: CUBE_FILE });
+    // shell = 2400mm^2 * 1.2mm = 2880mm^3; interior = 8000 - 2880 = 5120mm^3
+    // at 50% fill = 2560mm^3; effective = 5440mm^3 = 5.44cm^3.
+    const expectedGrams = 5.44 * PLA.density;
+    expect(r.grams).toBeCloseTo(expectedGrams, 6);
+    // The naive (pre-shell-model) formula would have under-counted this.
+    expect(r.grams).toBeGreaterThan(CUBE_FILE.vol * INFILL_UMUM.fillFraction * PLA.density);
   });
 
-  it("derives machine hours from volume * infill fraction, scaled by the quality time multiplier", () => {
-    const standard = calc(base);
-    const fine = calc({ ...base, quality: QUALITY_FINE });
-    expect(standard.hours).toBeCloseTo((18 * 0.5) / 5.5, 6);
+  it("weighs a fully solid part (100% infill) at its full volume regardless of shell thickness", () => {
+    const solidInfill: InfillOption = { ...INFILL_UMUM, fillFraction: 1 };
+    const r = calc({ ...base, file: CUBE_FILE, infill: solidInfill });
+    expect(r.grams).toBeCloseTo(CUBE_FILE.vol * PLA.density, 6);
+  });
+
+  it("caps the shell volume at the part's own volume so a tiny/thin part never exceeds 100% solid weight", () => {
+    const thickShell: Settings = { ...SETTINGS, shellThicknessMm: 100 }; // absurdly thick on purpose
+    const r = calc({ ...base, file: CUBE_FILE, settings: thickShell });
+    expect(r.grams).toBeCloseTo(CUBE_FILE.vol * PLA.density, 6);
+  });
+
+  it("reduces to volume * infill fraction * density when the shell is disabled (thickness 0)", () => {
+    const noShell: Settings = { ...SETTINGS, shellThicknessMm: 0 };
+    const r = calc({ ...base, file: CUBE_FILE, settings: noShell });
+    expect(r.grams).toBeCloseTo(CUBE_FILE.vol * INFILL_UMUM.fillFraction * PLA.density, 6);
+  });
+
+  it("derives machine hours from the same shell-aware effective volume, scaled by the quality time multiplier", () => {
+    const standard = calc({ ...base, file: CUBE_FILE });
+    const fine = calc({ ...base, file: CUBE_FILE, quality: QUALITY_FINE });
+    expect(standard.hours).toBeCloseTo(5.44 / 5.5, 6);
     expect(fine.hours).toBeCloseTo(standard.hours * 1.6, 6);
   });
 
@@ -148,9 +183,9 @@ describe("calc", () => {
     expect(five.matCost).toBeCloseTo(one.matCost * 5, 6);
   });
 
-  it("charges the finish cost from settings, scaled by quantity", () => {
-    const sanded = calc({ ...base, finish: "sand", qty: 3 });
-    expect(sanded.finishCost).toBe(SETTINGS.finishCostSand * 3);
+  it("charges the selected finish option's price, scaled by quantity", () => {
+    const sanded = calc({ ...base, finish: FINISH_SAND, qty: 3 });
+    expect(sanded.finishCost).toBe(FINISH_SAND.price * 3);
   });
 
   it("charges the selected color's extra price, scaled by quantity, and nothing for a free color", () => {
@@ -212,7 +247,7 @@ describe("buildQuoteMessage", () => {
       infillPercent: 25,
       scale: 100,
       qty: 2,
-      finish: "sand",
+      finishLabel: "Amplas halus",
       delivery: "express",
       total: 100000,
     });
@@ -234,7 +269,7 @@ describe("buildQuoteMessage", () => {
       infillPercent: 25,
       scale: 100,
       qty: 1,
-      finish: "none",
+      finishLabel: "Apa adanya",
       delivery: "reguler",
       total: 50000,
     });

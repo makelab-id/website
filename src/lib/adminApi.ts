@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   Color,
   ColorInput,
+  FinishOption,
+  FinishOptionInput,
   InfillOption,
   InfillOptionInput,
   Material,
@@ -114,8 +116,24 @@ export function useInfillOptionMutations() {
   return useResourceMutations<InfillOptionInput, InfillOption>("infill-options", "infill-options");
 }
 
+export function useFinishOptionMutations() {
+  return useResourceMutations<FinishOptionInput, FinishOption>("finish-options", "finish-options");
+}
+
 export function useModelMutations() {
   return useResourceMutations<PrintModelInput, PrintModel>("models", "models");
+}
+
+export function useModelImageUpload() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, file }: { id: number; file: File }) => {
+      const form = new FormData();
+      form.append("image", file);
+      return fetch(`${BASE}/models/${id}/image`, { method: "POST", body: form }).then(parseOrThrow) as Promise<PrintModel>;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["models"] }),
+  });
 }
 
 export function useUpdateSettings() {

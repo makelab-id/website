@@ -1,33 +1,63 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useModels, useSettings } from "../lib/api";
 import { buildCatalogOrderMessage, rupiah, waLink } from "../lib/pricing";
 import { ImagePlaceholder } from "../components/ImagePlaceholder";
+import { Pagination } from "../components/ui/Pagination";
 import { Link } from "react-router-dom";
 
 const ALL = "Semua";
+const PAGE_SIZE = 6;
 
 export function Katalog() {
   const { data: models, isLoading } = useModels();
   const { data: settings } = useSettings();
   const [filter, setFilter] = useState<string>(ALL);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
 
   const visible = useMemo(() => (models ?? []).filter((m) => m.active), [models]);
   const categories = useMemo(() => Array.from(new Set(visible.map((m) => m.category))), [visible]);
-  const filtered = useMemo(
+  const byCategory = useMemo(
     () => (filter === ALL ? visible : visible.filter((m) => m.category === filter)),
     [visible, filter],
   );
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return byCategory;
+    return byCategory.filter(
+      (m) => m.name.toLowerCase().includes(q) || m.description.toLowerCase().includes(q),
+    );
+  }, [byCategory, search]);
+
+  useEffect(() => setPage(1), [filter, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const pageItems = useMemo(
+    () => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [filtered, page],
+  );
 
   return (
-    <main style={{ maxWidth: 1180, margin: "0 auto", padding: "44px 24px 0" }}>
+    <main className="mk-page" style={{ maxWidth: 1180, margin: "0 auto", padding: "44px 24px 0" }}>
       <h6 style={{ color: "var(--color-accent)", marginBottom: 6 }}>Model library</h6>
-      <h1 style={{ fontSize: 44, margin: "0 0 10px" }}>Katalog siap cetak</h1>
+      <h1 style={{ fontSize: "clamp(30px, 6vw, 44px)", margin: "0 0 10px" }}>Katalog siap cetak</h1>
       <p style={{ maxWidth: "62ch", color: "var(--color-neutral-700)", fontSize: 15 }}>
-        Model yang sudah kami uji cetak — tinggal pilih material dan warna. Katalog terus bertambah; kalau ada part
-        yang kamu cari belum ada, tanyakan lewat chat.
+        Model yang sudah kami design. Tinggal pilih material dan warna. <br/> 
+        Katalog terus bertambah. Jika ada part yang kamu cari belum ada, tanyakan lewat chat.
       </p>
 
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", margin: "26px 0 28px", alignItems: "center" }}>
+      <div style={{ margin: "26px 0 16px", maxWidth: 360 }}>
+        <input
+          type="search"
+          className="input"
+          placeholder="Cari model…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          aria-label="Cari model"
+        />
+      </div>
+
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", margin: "0 0 28px", alignItems: "center" }}>
         <button
           className="btn btn-secondary"
           onClick={() => setFilter(ALL)}
@@ -60,11 +90,11 @@ export function Katalog() {
         </span>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 24 }}>
-        {filtered.map((m) => (
+      <div className="mk-grid mk-grid-3" style={{ gap: 24 }}>
+        {pageItems.map((m) => (
           <div key={m.slot} className="card elev-sm" style={{ padding: 0, overflow: "hidden", gap: 0 }}>
             <div className="washed" style={{ height: 190, background: "var(--color-neutral-200)" }}>
-              <ImagePlaceholder category={m.category} label="Foto hasil cetak" />
+              <ImagePlaceholder category={m.category} label="Foto hasil cetak" src={m.imageUrl ?? undefined} />
             </div>
             <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 10, flex: 1 }}>
               <span className="card-kicker">{m.category}</span>
@@ -89,6 +119,16 @@ export function Katalog() {
             </div>
           </div>
         ))}
+      </div>
+
+      {!isLoading && filtered.length === 0 && (
+        <p style={{ color: "var(--color-neutral-600)", fontSize: 14, margin: "20px 0" }}>
+          Tidak ada model yang cocok dengan pencarian.
+        </p>
+      )}
+
+      <div style={{ marginTop: 28 }}>
+        <Pagination page={page} totalPages={totalPages} onChange={setPage} />
       </div>
 
       <div

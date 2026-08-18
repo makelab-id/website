@@ -21,9 +21,9 @@ h1, h2, h3, h4, h5, h6 {
   letter-spacing: -0.015em;
   margin: 0 0 var(--space-2);
 }
-h1 { font-size: 42px; }
-h2 { font-size: 32px; }
-h3 { font-size: 25px; }
+h1 { font-size: clamp(30px, 6vw, 42px); }
+h2 { font-size: clamp(24px, 4.5vw, 32px); }
+h3 { font-size: clamp(19px, 3.4vw, 25px); }
 h4 { font-size: 20px; }
 h5 { font-size: 16px; }
 h6 { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; }
@@ -90,9 +90,30 @@ input[type="range"] { accent-color: var(--color-accent); }
 textarea.input { min-height: 90px; resize: vertical; }
 
 .radio { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; }
-.radio input, .seg-opt input {
+.radio input {
   position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none;
 }
+
+.dropdown { position: relative; }
+.dropdown-toggle {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; text-align: left; cursor: pointer;
+}
+.dropdown-toggle svg { flex: none; transition: transform 0.15s ease; }
+.dropdown-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+.dropdown-menu {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 30;
+  margin: 0; padding: 4px; list-style: none; max-height: 240px; overflow-y: auto;
+  background: var(--color-surface); border: 1px solid var(--color-divider);
+  box-shadow: var(--shadow-md);
+}
+.dropdown-opt {
+  display: block; width: 100%; text-align: left; padding: 8px 10px; font: inherit; font-size: 14px;
+  color: inherit; cursor: pointer; background: transparent; border: 0; border-radius: var(--radius-sm);
+}
+.dropdown-opt:hover { background: color-mix(in srgb, var(--color-text) 7%, transparent); }
+.dropdown-opt[aria-selected="true"] { background: var(--color-accent); color: var(--color-bg); }
+.dropdown-opt[aria-selected="true"]:hover { background: var(--color-accent-600); }
 .radio .dot {
   width: 16px; height: 16px; flex: none; border-radius: 50%;
   border: 1.5px solid var(--color-divider);
@@ -103,16 +124,6 @@ textarea.input { min-height: 90px; resize: vertical; }
   box-shadow: inset 0 0 0 4px var(--color-bg);
 }
 .radio input:focus-visible + .dot { outline: 2px solid var(--color-accent); outline-offset: 2px; }
-
-.seg { display: inline-flex; overflow: hidden; border: 1px solid var(--color-divider); }
-.seg-opt {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 7px 12px; font-size: 13px; cursor: pointer;
-}
-.seg-opt + .seg-opt { border-left: 1px solid var(--color-divider); }
-.seg-opt:has(input:checked) { background: var(--color-accent); color: var(--color-bg); }
-.seg-opt:not(:has(input:checked)):hover { background: color-mix(in srgb, var(--color-text) 7%, transparent); }
-.seg-opt:has(input:focus-visible) { outline: 2px solid var(--color-accent); outline-offset: -2px; }
 
 /* — cards — */
 .card {
@@ -146,7 +157,23 @@ textarea.input { min-height: 90px; resize: vertical; }
 .nav a { color: inherit; text-decoration: none; font-size: 14px; }
 .nav a:hover, .nav a[aria-current="page"] { color: var(--color-accent); }
 
+.nav-links { display: flex; align-items: center; gap: 28px; }
+.nav-toggle { display: none; }
+@media (max-width: 760px) {
+  .nav-toggle { display: inline-flex; }
+  .nav-links {
+    position: absolute; top: 100%; left: 0; right: 0;
+    flex-direction: column; align-items: stretch; gap: 2px;
+    padding: var(--space-2) var(--space-4) var(--space-4);
+    background: var(--color-bg); border-bottom: 1px solid var(--color-divider);
+  }
+  .nav-links[data-open="false"] { display: none; }
+  .nav-links a { padding: 10px 4px; }
+  .nav-links .nav-cta { margin-top: 8px; }
+}
+
 /* — tables — */
+.table-scroll { width: 100%; overflow-x: auto; }
 .table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .table th {
   text-align: left; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
@@ -178,3 +205,48 @@ textarea.input { min-height: 90px; resize: vertical; }
 .btn, .tag, .seg, .input { border-radius: var(--radius-sm); }
 .card, .dialog { border-radius: var(--radius-lg); border: 1px solid var(--color-divider); }
 .radio .dot { border-radius: var(--radius-sm); }
+
+/* — responsive layout — */
+/* Grid containers used across the marketing pages and the quote form.
+   Column counts collapse in two steps as the viewport narrows; components
+   set --mk-cols-desktop inline (default 2) and pick a class for the tablet
+   target column count. */
+.mk-grid { display: grid; }
+.mk-grid-2 { grid-template-columns: 1fr 1fr; }
+.mk-grid-3 { grid-template-columns: repeat(3, 1fr); }
+.mk-grid-4 { grid-template-columns: repeat(4, 1fr); }
+
+@media (max-width: 900px) {
+  .mk-grid-2, .mk-grid-3, .mk-grid-4 { grid-template-columns: repeat(2, 1fr); }
+  .mk-stack-900 { grid-template-columns: 1fr !important; }
+  .mk-aside-sticky { position: static !important; }
+}
+
+@media (max-width: 640px) {
+  .mk-grid-2, .mk-grid-3, .mk-grid-4 { grid-template-columns: 1fr; }
+  .mk-page { padding-left: 16px !important; padding-right: 16px !important; }
+  .mk-hide-mobile { display: none !important; }
+}
+
+@media (min-width: 641px) {
+  .mk-show-mobile { display: none !important; }
+}
+
+@media (max-width: 760px) {
+  .admin-shell { flex-direction: column; }
+  .admin-sidebar {
+    width: 100% !important; flex-direction: row !important; align-items: center;
+    overflow-x: auto; border-right: 0 !important; border-bottom: 1px solid var(--color-divider);
+    padding: 12px 14px !important; gap: 10px !important;
+  }
+  .admin-brand { margin-bottom: 0 !important; margin-right: 4px; flex: none; }
+  .admin-sidebar-footer {
+    margin-top: 0 !important; margin-left: auto; flex-direction: row !important;
+    padding-top: 0 !important; border-top: 0 !important;
+  }
+  .admin-main { padding: 24px 18px !important; }
+}
+
+@media (max-width: 640px) {
+  .admin-model-fields { grid-template-columns: repeat(2, 1fr) !important; }
+}

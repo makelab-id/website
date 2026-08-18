@@ -13,6 +13,7 @@ const AdminLogin = lazy(() => import("./routes/admin/AdminLogin").then((m) => ({
 const AdminLayout = lazy(() => import("./routes/admin/AdminLayout").then((m) => ({ default: m.AdminLayout })));
 const AdminCalculator = lazy(() => import("./routes/admin/AdminCalculator").then((m) => ({ default: m.AdminCalculator })));
 const AdminCatalog = lazy(() => import("./routes/admin/AdminCatalog").then((m) => ({ default: m.AdminCatalog })));
+const AdminSettings = lazy(() => import("./routes/admin/AdminSettings").then((m) => ({ default: m.AdminSettings })));
 
 function AdminFallback() {
   return (
@@ -51,6 +52,7 @@ export function App() {
       >
         <Route index element={<AdminCalculator />} />
         <Route path="katalog" element={<AdminCatalog />} />
+        <Route path="pengaturan" element={<AdminSettings />} />
       </Route>
     </Routes>
   );

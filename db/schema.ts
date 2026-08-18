@@ -40,6 +40,14 @@ export const infillOptions = sqliteTable("infill_options", {
   sortOrder: integer("sort_order").notNull().default(0),
 });
 
+export const finishOptions = sqliteTable("finish_options", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  label: text("label").notNull().unique(),
+  // Extra cost per pcs for this finishing option.
+  price: integer("price").notNull().default(0),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
 export const models = sqliteTable("models", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   // Stable key used by the frontend to pick a placeholder image tile.
@@ -47,6 +55,10 @@ export const models = sqliteTable("models", {
   category: text("category").notNull(),
   name: text("name").notNull(),
   description: text("description").notNull(),
+  // Path (e.g. "/uploads/<file>") to an uploaded product photo; null until
+  // one is uploaded via POST /api/models/:id/image, then the placeholder
+  // tile in ImagePlaceholder is skipped in favor of the real photo.
+  imageUrl: text("image_url"),
   sizeLabel: text("size_label").notNull(),
   materialLabel: text("material_label").notNull(),
   basePrice: integer("base_price").notNull(),
@@ -63,9 +75,11 @@ export const settings = sqliteTable("settings", {
   expressMarkupPct: real("express_markup_pct").notNull(),
   bulkQtyThreshold: integer("bulk_qty_threshold").notNull(),
   bulkDiscountPct: real("bulk_discount_pct").notNull(),
-  finishCostNone: integer("finish_cost_none").notNull().default(0),
-  finishCostSand: integer("finish_cost_sand").notNull(),
-  finishCostPaint: integer("finish_cost_paint").notNull(),
+  // Assumed uniform thickness (mm) of the always-solid outer shell (walls +
+  // top/bottom layers) a slicer prints regardless of infill %. Estimated
+  // material weight = shell volume (surface area × this) + infill-scaled
+  // interior volume, not just total volume × infill fraction.
+  shellThicknessMm: real("shell_thickness_mm").notNull().default(1.2),
 });
 
 // Zod schemas derived from the Drizzle table defs — single source of truth
@@ -97,6 +111,12 @@ export const infillOptionInsertSchema = createInsertSchema(infillOptions, {
 }).omit({ id: true });
 export const infillOptionSelectSchema = createSelectSchema(infillOptions);
 
+export const finishOptionInsertSchema = createInsertSchema(finishOptions, {
+  label: z.string().min(1),
+  price: z.number().int().nonnegative(),
+}).omit({ id: true });
+export const finishOptionSelectSchema = createSelectSchema(finishOptions);
+
 export const modelInsertSchema = createInsertSchema(models, {
   slot: z.string().min(1),
   category: z.string().min(1),
@@ -115,9 +135,7 @@ export const settingsUpdateSchema = createInsertSchema(settings, {
   expressMarkupPct: z.number().min(0),
   bulkQtyThreshold: z.number().int().positive(),
   bulkDiscountPct: z.number().min(0).max(1),
-  finishCostNone: z.number().int().nonnegative(),
-  finishCostSand: z.number().int().nonnegative(),
-  finishCostPaint: z.number().int().nonnegative(),
+  shellThicknessMm: z.number().positive().max(10),
 }).omit({ id: true });
 export const settingsSelectSchema = createSelectSchema(settings);
 
@@ -129,6 +147,8 @@ export type QualityOption = z.infer<typeof qualityOptionSelectSchema>;
 export type QualityOptionInput = z.infer<typeof qualityOptionInsertSchema>;
 export type InfillOption = z.infer<typeof infillOptionSelectSchema>;
 export type InfillOptionInput = z.infer<typeof infillOptionInsertSchema>;
+export type FinishOption = z.infer<typeof finishOptionSelectSchema>;
+export type FinishOptionInput = z.infer<typeof finishOptionInsertSchema>;
 export type PrintModel = z.infer<typeof modelSelectSchema>;
 export type PrintModelInput = z.infer<typeof modelInsertSchema>;
 export type Settings = z.infer<typeof settingsSelectSchema>;

@@ -1,7 +1,7 @@
 // Idempotent seed: inserts the original Makelab.dc.html DEFAULT_* data into
 // each table only if that table is still empty. Safe to run on every deploy.
 import { db } from "./client.js";
-import { materials, colors, qualityOptions, infillOptions, models, settings } from "./schema.js";
+import { materials, colors, qualityOptions, infillOptions, finishOptions, models, settings } from "./schema.js";
 
 const DEFAULT_MATERIALS = [
   { name: "PLA", ratePerGram: 1800, density: 1.24, comingSoon: false, sortOrder: 0 },
@@ -28,6 +28,12 @@ const DEFAULT_INFILL = [
   { label: "15% — display", percent: 15, fillFraction: 0.4, isDefault: false, sortOrder: 0 },
   { label: "25% — umum", percent: 25, fillFraction: 0.5, isDefault: true, sortOrder: 1 },
   { label: "50% — kuat", percent: 50, fillFraction: 0.68, isDefault: false, sortOrder: 2 },
+];
+
+const DEFAULT_FINISH = [
+  { label: "Apa adanya", price: 0, sortOrder: 0 },
+  { label: "Amplas halus", price: 15000, sortOrder: 1 },
+  { label: "Amplas + cat", price: 55000, sortOrder: 2 },
 ];
 
 const DEFAULT_MODELS = [
@@ -79,15 +85,13 @@ const DEFAULT_MODELS = [
 ].map((m) => ({ ...m, active: true }));
 
 const DEFAULT_SETTINGS = {
-  whatsappNumber: "6281234567890",
+  whatsappNumber: "628817502120",
   machineRatePerHour: 7000,
   setupFee: 10000,
   expressMarkupPct: 0.4,
   bulkQtyThreshold: 5,
   bulkDiscountPct: 0.1,
-  finishCostNone: 0,
-  finishCostSand: 15000,
-  finishCostPaint: 55000,
+  shellThicknessMm: 1.2,
 };
 
 export async function seed() {
@@ -109,6 +113,11 @@ export async function seed() {
   if ((await db.select().from(infillOptions)).length === 0) {
     await db.insert(infillOptions).values(DEFAULT_INFILL);
     console.log(`Seeded ${DEFAULT_INFILL.length} infill options.`);
+  }
+
+  if ((await db.select().from(finishOptions)).length === 0) {
+    await db.insert(finishOptions).values(DEFAULT_FINISH);
+    console.log(`Seeded ${DEFAULT_FINISH.length} finish options.`);
   }
 
   if ((await db.select().from(models)).length === 0) {

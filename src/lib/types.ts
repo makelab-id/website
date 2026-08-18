@@ -11,6 +11,8 @@ export type {
   QualityOptionInput,
   InfillOption,
   InfillOptionInput,
+  FinishOption,
+  FinishOptionInput,
   PrintModel,
   PrintModelInput,
   Settings,

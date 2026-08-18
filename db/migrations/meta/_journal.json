@@ -8,6 +8,27 @@
       "when": 1786717748570,
       "tag": "0000_round_steve_rogers",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1787007298299,
+      "tag": "0001_keen_rick_jones",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1787010531419,
+      "tag": "0002_large_outlaw_kid",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1787010788984,
+      "tag": "0003_slimy_nekra",
+      "breakpoints": true
     }
   ]
 }
